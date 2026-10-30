@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    container_name: channel4444
+    ports:
+      - "4444:4444"
+    environment:
+      - PORT=4444
+      # - ACCESS_PASSWORD=change-me
+    volumes:
+      - channel4444-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  channel4444-data:

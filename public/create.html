@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your profile – channel4444</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="centered">
+  <form class="card" id="profile-form">
+    <div class="brand">channel<span>4444</span></div>
+    <h1 id="form-title">Create user</h1>
+
+    <div class="avatar-picker">
+      <div id="avatar-preview"></div>
+      <div>
+        <label class="btn">Upload avatar
+          <input type="file" name="avatar" id="avatar-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+        </label>
+        <button type="button" class="btn ghost small hidden" id="remove-avatar">Remove</button>
+        <p class="hint">JPEG, PNG, GIF or WebP, up to 5 MB</p>
+      </div>
+    </div>
+
+    <label class="field">User name
+      <input type="text" name="name" id="name-input" maxlength="32" required autocomplete="off">
+    </label>
+
+    <p class="error" id="form-error"></p>
+    <div class="actions">
+      <a href="/" class="btn ghost hidden" id="cancel">Cancel</a>
+      <button class="btn primary" type="submit" id="submit">Create</button>
+    </div>
+  </form>
+  <script src="/common.js"></script>
+  <script src="/create.js"></script>
+</body>
+</html>

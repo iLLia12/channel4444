@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>channel4444</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">channel<span>4444</span></div>
+    <div class="me">
+      <span class="status" id="conn-status" title="Connecting…"></span>
+      <div id="me-avatar"></div>
+      <span id="me-name"></span>
+      <a href="/create.html" class="btn ghost small">Edit profile</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section>
+        <h2>In video chat <span class="count" id="video-count">0</span></h2>
+        <ul class="userlist" id="video-users"></ul>
+        <p class="empty" id="video-empty">Nobody in the call</p>
+      </section>
+      <section>
+        <h2>In the app <span class="count" id="online-count">0</span></h2>
+        <ul class="userlist" id="online-users"></ul>
+      </section>
+    </aside>
+
+    <section class="video-panel">
+      <div class="video-idle" id="video-idle">
+        <div>
+          <h2>Video chat</h2>
+          <p id="video-idle-text">You can't see or hear the call until you connect.</p>
+          <button class="btn primary" id="join-video">Connect to video chat</button>
+          <p class="error" id="video-error"></p>
+        </div>
+      </div>
+      <div class="video-live hidden" id="video-live">
+        <div class="video-grid" id="video-grid"></div>
+        <div class="video-controls">
+          <button class="btn" id="toggle-mic">Mute mic</button>
+          <button class="btn" id="toggle-cam">Turn camera off</button>
+          <button class="btn danger" id="leave-video">Leave</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="chat-panel">
+      <h2>Chat</h2>
+      <div class="messages" id="messages"></div>
+      <form class="composer" id="composer">
+        <label class="btn ghost icon" title="Send a photo">
+          📷<input type="file" id="photo-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+        </label>
+        <input type="text" id="message-input" placeholder="Write a message…" maxlength="4000" autocomplete="off">
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+      <p class="error" id="chat-error"></p>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/common.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
