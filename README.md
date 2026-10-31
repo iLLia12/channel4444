@@ -29,6 +29,11 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 - **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
 
+## Deployment
+
+- **Hosting:** DigitalOcean.
+- **Domain:** registered through Cloudflare.
+
 ## Configuration (environment variables)
 
 | Variable | Purpose |
