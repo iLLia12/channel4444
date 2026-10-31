@@ -197,6 +197,33 @@ h2 {
 .tile.connecting .tile-name::after { content: " · connecting…"; color: var(--muted); }
 .tile.failed .tile-name::after { content: " · connection failed"; color: var(--danger); }
 .video-controls { display: flex; justify-content: center; gap: 8px; }
+.video-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(229, 72, 77, .12);
+  border: 1px solid rgba(229, 72, 77, .4);
+  color: #ffb4b6;
+}
+.mic-meter {
+  position: absolute;
+  right: 8px;
+  bottom: 10px;
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, .6);
+  overflow: hidden;
+}
+.mic-meter span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+.tile-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+}
+.tile.needs-click .tile-play { display: inline-flex; }
 
 /* ---------- chat ---------- */
 

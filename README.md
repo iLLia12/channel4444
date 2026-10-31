@@ -32,7 +32,8 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 - **In the app**: everyone with the main page open right now.
 - **In video chat**: everyone currently in the call.
 - **Video chat**: you see and hear nothing until you click **Connect to video chat**.
-  Several people can join. You get mic/camera toggles and a Leave button.
+  Several people can join. You get mic/camera toggles and a Leave button. A green bar on your
+  own tile shows your mic level. A red notice appears if others can't hear or see you.
 - **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
 
@@ -101,3 +102,13 @@ Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
 The TURN relay is reached by the server's IP address, not the domain, because a Cloudflare-proxied
 (orange cloud) domain doesn't forward TURN traffic.
 
+## Troubleshooting: others can't hear you
+
+1. **Look at the green bar** on your own tile and speak. If it doesn't move, your mic isn't picking
+   you up. Check the mic selected in the browser (the camera/mic icon in the address bar) and in your
+   system sound settings.
+2. **Read the red notice** above the video, if there is one. It says whether the mic is blocked,
+   missing or muted.
+3. **Close other apps using the mic** (Zoom, Teams, Discord, another browser tab), then leave and rejoin.
+4. **The other person sees "Click to turn on sound"** when their browser blocked autoplay. They
+   need to click it.

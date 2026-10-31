@@ -19,6 +19,10 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
   - Several people can be in the meeting at once.
   - Controls: mute/unmute mic, camera on/off, leave.
   - If camera/mic access is denied, the user joins to watch and listen only.
+  - If the mic or camera isn't available (blocked, busy in another app, missing), the user still joins
+    with whatever works, and a red notice says who can't hear or see them and how to fix it.
+  - Your own tile shows a live microphone level bar.
+  - If the browser blocks sound from playing automatically, the tile shows a "Click to turn on sound" button.
 - **List of users currently in the video chat**
 - **Separate list of users currently in the app** (everyone with the main page open)
 

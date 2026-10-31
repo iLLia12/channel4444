@@ -272,12 +272,13 @@ async function getLocalMedia() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error('Camera access needs HTTPS (or localhost).');
   }
+  // Fall back step by step: a blocked or busy mic shouldn't cost us the camera, and vice versa.
   const attempts = [{ video: true, audio: true }, { audio: true }, { video: true }];
   for (const constraints of attempts) {
     try {
       return await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
-      if (err.name === 'NotAllowedError') break;
+      console.warn('[video] getUserMedia', JSON.stringify(constraints), err.name, err.message);
     }
   }
   return null; // join receive-only
@@ -293,7 +294,8 @@ function makeTile(key, label, stream, isLocal) {
     { class: 'tile' + (isLocal ? ' local' : ''), 'data-key': key },
     vid,
     el('div', { class: 'tile-placeholder' }),
-    nameEl
+    nameEl,
+    isLocal ? null : el('button', { class: 'btn primary tile-play', text: '🔊 Click to turn on sound', onclick: playAllRemote })
   );
   $('video-grid').append(tile);
   layoutGrid();
@@ -349,9 +351,8 @@ function createPeer(socketId, userId) {
     e.track.onunmute = refresh;
     e.track.onended = refresh;
     refresh();
-    const v = peer.tile.querySelector('video');
-    v.srcObject = stream;
-    v.play().catch(() => {});
+    peer.tile.querySelector('video').srcObject = stream;
+    playRemote(peer);
   };
   pc.onconnectionstatechange = () => {
     console.log(`[video] ${userById(userId).name}: ${pc.connectionState}`);
@@ -360,6 +361,72 @@ function createPeer(socketId, userId) {
   };
   peer.tile.classList.add('connecting');
   return peer;
+}
+
+// Browsers may refuse to autoplay video with sound; then we ask for a click.
+function playRemote(peer) {
+  peer.tile
+    .querySelector('video')
+    .play()
+    .then(() => peer.tile.classList.remove('needs-click'))
+    .catch((err) => {
+      console.warn('[video] autoplay blocked', err.name);
+      peer.tile.classList.add('needs-click');
+    });
+}
+
+function playAllRemote() {
+  for (const peer of video.peers.values()) playRemote(peer);
+}
+
+// Live level bar on our own tile, so you can see the mic is picking you up.
+function startMicMeter(tile) {
+  const track = video.localStream && video.localStream.getAudioTracks()[0];
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!track || !Ctx) return;
+  const ctx = new Ctx();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+  const fill = el('span');
+  tile.append(el('div', { class: 'mic-meter', title: 'Microphone level' }, fill));
+  const tick = () => {
+    analyser.getByteTimeDomainData(data);
+    let peak = 0;
+    for (const v of data) peak = Math.max(peak, Math.abs(v - 128));
+    fill.style.width = Math.min(100, (peak / 48) * 100) + '%';
+    video.meterFrame = requestAnimationFrame(tick);
+  };
+  tick();
+  video.audioCtx = ctx;
+}
+
+function stopMicMeter() {
+  cancelAnimationFrame(video.meterFrame);
+  if (video.audioCtx) video.audioCtx.close().catch(() => {});
+  video.audioCtx = null;
+}
+
+// Tell the user plainly when others can't hear or see them.
+function updateMediaNotice() {
+  const s = video.localStream;
+  const audio = s && s.getAudioTracks().find((t) => t.readyState === 'live');
+  const cam = s && s.getVideoTracks().find((t) => t.readyState === 'live');
+  let msg = '';
+  if (!audio && !cam) {
+    msg = "Your camera and microphone aren't available, so others can't see or hear you. " +
+      "Allow them in the browser's site settings (the icon left of the address), then leave and rejoin.";
+  } else if (!audio) {
+    msg = "Your microphone isn't available, so others can't hear you. Allow the microphone in the " +
+      "browser's site settings and close other apps using it (Zoom, Teams, Discord), then leave and rejoin.";
+  } else if (!audio.enabled) {
+    msg = 'Your microphone is muted. Others can\'t hear you.';
+  } else if (!cam) {
+    msg = "Your camera isn't available, so others can hear you but not see you.";
+  }
+  $('video-notice').textContent = msg;
+  $('video-notice').classList.toggle('hidden', !msg);
 }
 
 function addLocalTracks(pc, asOfferer) {
@@ -447,6 +514,7 @@ function updateControls() {
   $('toggle-mic').classList.toggle('off', !!audio && !audio.enabled);
   $('toggle-cam').textContent = cam && !cam.enabled ? 'Turn camera on' : 'Turn camera off';
   $('toggle-cam').classList.toggle('off', !!cam && !cam.enabled);
+  updateMediaNotice();
 }
 
 async function joinVideo() {
@@ -457,14 +525,16 @@ async function joinVideo() {
   try {
     await getIceServers();
     video.localStream = await getLocalMedia();
-    if (!video.localStream) {
-      $('video-error').textContent = 'No camera/microphone access — joining to watch and listen only.';
+    if (video.localStream) {
+      // e.g. a USB mic unplugged mid-call
+      for (const t of video.localStream.getTracks()) t.addEventListener('ended', updateControls);
     }
     video.joined = true;
     $('video-idle').classList.add('hidden');
     $('video-live').classList.remove('hidden');
     const local = makeTile('local', userById(me.id).name + ' (you)', video.localStream, true);
     updateTilePlaceholder(local, video.localStream, userById(me.id));
+    startMicMeter(local);
     updateControls();
     socket.emit('video:join');
   } catch (err) {
@@ -479,6 +549,7 @@ function leaveVideo() {
   if (!video.joined) return;
   socket.emit('video:leave');
   for (const id of [...video.peers.keys()]) removePeer(id);
+  stopMicMeter();
   if (video.localStream) video.localStream.getTracks().forEach((t) => t.stop());
   video.localStream = null;
   video.joined = false;
