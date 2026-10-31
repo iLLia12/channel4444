@@ -74,7 +74,7 @@ Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin 
 | `ACCESS_PASSWORD` | If set, the whole app is locked behind this shared password |
 | `ADMIN_PASSWORD` | Password for `/admin`. If it's not set, the admin page is turned off |
 | `SSL_KEY`, `SSL_CERT` | Paths to a key and certificate to serve over HTTPS |
-| `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | TURN server for peers behind strict NATs |
+| `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | TURN server for peers behind strict NATs. `TURN_URL` can be comma-separated |
 
 Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
 
@@ -86,3 +86,18 @@ Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
 - Video is peer-to-peer (WebRTC mesh); the server only relays signaling. That works well
   for small groups (about 6 people). Some networks need a TURN server to connect.
 - Data (users, last 500 messages, uploaded images) is stored in `data/`.
+
+## Troubleshooting: video stuck on "connecting…"
+
+1. **Update the server.** Run `channel4444-update`, then re-run `setup.sh` so the new TURN settings
+   are applied: `DOMAIN=<your domain> bash /opt/channel4444/setup.sh`.
+2. **Check that the TURN server is running:** `channel4444 ps` should show `coturn` as running.
+   For its logs, run `channel4444 logs coturn --tail 50`.
+3. **Open the TURN ports in the DigitalOcean Cloud Firewall** (Networking → Firewalls), if you
+   use one. It is separate from `ufw` on the server. Allow 3478 TCP+UDP and 49152-65535 UDP inbound.
+4. **Check in the browser:** the console logs `[video] <name>: <state>` for each connection.
+   For full detail, open `chrome://webrtc-internals` during a call.
+
+The TURN relay is reached by the server's IP address, not the domain, because a Cloudflare-proxied
+(orange cloud) domain doesn't forward TURN traffic.
+

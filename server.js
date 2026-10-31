@@ -239,7 +239,8 @@ app.get('/api/config', (req, res) => {
   const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
   if (process.env.TURN_URL) {
     iceServers.push({
-      urls: process.env.TURN_URL,
+      // Comma-separated, e.g. "turn:1.2.3.4:3478?transport=udp,turn:1.2.3.4:3478?transport=tcp"
+      urls: process.env.TURN_URL.split(',').map((u) => u.trim()).filter(Boolean),
       username: process.env.TURN_USERNAME || '',
       credential: process.env.TURN_CREDENTIAL || '',
     });

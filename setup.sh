@@ -181,7 +181,8 @@ services:
       PORT: "${APP_PORT}"
       ACCESS_PASSWORD: \${ACCESS_PASSWORD}
       ADMIN_PASSWORD: \${ADMIN_PASSWORD}
-      TURN_URL: "turn:${DOMAIN}:3478"
+      # The IP, not the domain: a Cloudflare-proxied domain doesn't forward TURN traffic.
+      TURN_URL: "turn:${PUBLIC_IP}:3478?transport=udp,turn:${PUBLIC_IP}:3478?transport=tcp"
       TURN_USERNAME: \${TURN_USERNAME}
       TURN_CREDENTIAL: \${TURN_PASSWORD}
     volumes:

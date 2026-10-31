@@ -195,6 +195,7 @@ h2 {
   font-size: 12px;
 }
 .tile.connecting .tile-name::after { content: " · connecting…"; color: var(--muted); }
+.tile.failed .tile-name::after { content: " · connection failed"; color: var(--danger); }
 .video-controls { display: flex; justify-content: center; gap: 8px; }
 
 /* ---------- chat ---------- */

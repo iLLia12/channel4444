@@ -43,4 +43,6 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 ## 6. Known limits
 - Camera/mic need HTTPS unless you're on localhost.
 - Group video works well for about 6 people, because every participant connects to every other one.
-- Some networks need a TURN server (configured with the `TURN_*` variables).
+- Some networks need a TURN server (configured with the `TURN_*` variables). In production it is
+  coturn on the same droplet, reached by IP (the Cloudflare proxy doesn't forward TURN), over UDP with a TCP fallback.
+- When a peer can't connect, its video tile shows "connection failed".

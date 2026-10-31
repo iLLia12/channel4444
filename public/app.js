@@ -253,6 +253,7 @@ const video = {
   joining: false,
   localStream: null,
   peers: new Map(), // socketId -> { pc, stream, userId, pendingCandidates, tile }
+  earlyCandidates: new Map(), // socketId -> candidates that arrived before the peer existed
   iceServers: null,
 };
 
@@ -325,10 +326,14 @@ function layoutGrid() {
   $('video-grid').style.setProperty('--cols', cols);
 }
 
-async function createPeer(socketId, userId) {
-  const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
+// Synchronous on purpose: the peer must be registered before any other signaling
+// message is handled, or its ICE candidates get lost. ICE servers are loaded on join.
+function createPeer(socketId, userId) {
+  const pc = new RTCPeerConnection({ iceServers: video.iceServers });
   const stream = new MediaStream();
-  const peer = { pc, stream, userId, pendingCandidates: [], tile: null };
+  const pendingCandidates = video.earlyCandidates.get(socketId) || [];
+  video.earlyCandidates.delete(socketId);
+  const peer = { pc, stream, userId, pendingCandidates, tile: null };
   video.peers.set(socketId, peer);
 
   peer.tile = makeTile(socketId, userById(userId).name, stream, false);
@@ -349,7 +354,9 @@ async function createPeer(socketId, userId) {
     v.play().catch(() => {});
   };
   pc.onconnectionstatechange = () => {
-    peer.tile.classList.toggle('connecting', pc.connectionState !== 'connected');
+    console.log(`[video] ${userById(userId).name}: ${pc.connectionState}`);
+    peer.tile.classList.toggle('connecting', pc.connectionState !== 'connected' && pc.connectionState !== 'failed');
+    peer.tile.classList.toggle('failed', pc.connectionState === 'failed');
   };
   peer.tile.classList.add('connecting');
   return peer;
@@ -380,7 +387,7 @@ async function flushCandidates(peer) {
 socket.on('video:peers', async (list) => {
   for (const { socketId, userId } of list) {
     if (socketId === socket.id) continue;
-    const peer = await createPeer(socketId, userId);
+    const peer = createPeer(socketId, userId);
     addLocalTracks(peer.pc, true);
     const offer = await peer.pc.createOffer();
     await peer.pc.setLocalDescription(offer);
@@ -394,7 +401,7 @@ socket.on('video:signal', async ({ from, userId, description, candidate }) => {
   try {
     if (description) {
       if (description.type === 'offer') {
-        if (!peer) peer = await createPeer(from, userId);
+        if (!peer) peer = createPeer(from, userId);
         await peer.pc.setRemoteDescription(description);
         // Adding tracks after the offer reuses the offered transceivers.
         addLocalTracks(peer.pc, false);
@@ -406,8 +413,11 @@ socket.on('video:signal', async ({ from, userId, description, candidate }) => {
         await peer.pc.setRemoteDescription(description);
         await flushCandidates(peer);
       }
-    } else if (candidate && peer) {
-      if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(candidate);
+    } else if (candidate) {
+      if (!peer) {
+        if (!video.earlyCandidates.has(from)) video.earlyCandidates.set(from, []);
+        video.earlyCandidates.get(from).push(candidate);
+      } else if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(candidate);
       else peer.pendingCandidates.push(candidate);
     }
   } catch (err) {
@@ -423,6 +433,7 @@ function removePeer(socketId) {
   peer.pc.close();
   peer.tile.remove();
   video.peers.delete(socketId);
+  video.earlyCandidates.delete(socketId);
   layoutGrid();
 }
 
@@ -444,6 +455,7 @@ async function joinVideo() {
   $('video-error').textContent = '';
   $('join-video').disabled = true;
   try {
+    await getIceServers();
     video.localStream = await getLocalMedia();
     if (!video.localStream) {
       $('video-error').textContent = 'No camera/microphone access — joining to watch and listen only.';
