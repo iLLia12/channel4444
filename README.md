@@ -17,6 +17,13 @@ docker compose logs -f         # logs
 docker compose down            # stop (data is kept in the channel4444-data volume)
 ```
 
+Docker Compose reads `ADMIN_PASSWORD` and `ACCESS_PASSWORD` from a `.env` file next to
+`docker-compose.yml`. That file is git-ignored, so passwords are never committed:
+
+```sh
+echo "ADMIN_PASSWORD=your-strong-password" > .env
+```
+
 Open `http://localhost:4444`. On first visit you are sent to the **Create user** page
 (name + avatar). Your identity is stored in the browser's localStorage.
 
@@ -29,10 +36,35 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 - **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
 
+## Admin page
+
+Open `/admin` (e.g. `http://localhost:4444/admin`) and sign in with `ADMIN_PASSWORD`.
+The admin page is turned off when `ADMIN_PASSWORD` isn't set.
+
+The layout copies VS Code: a narrow activity bar on the left, with one button for now:
+
+- **Users**: every registered user with their avatar, name, ID, registration date,
+  status (online, in video chat, or offline) and number of chat messages. You can search by name or ID.
+
+Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin session lasts 12 hours.
+
 ## Deployment
 
 - **Hosting:** DigitalOcean.
 - **Domain:** registered through Cloudflare.
+- **Set up with** `setup.sh` (run as root on the server). It installs Docker, Caddy (HTTPS),
+  coturn (TURN), a firewall and nightly backups.
+- **Code on the server:** `/opt/channel4444` (unless `APP_DIR` was set when running `setup.sh`).
+  - Secrets: `/opt/channel4444/.env.prod`
+  - Data: `/opt/channel4444/data`; backups go to `/var/backups/channel4444`
+  - Commands: `channel4444-update` (pull and rebuild), `channel4444 logs -f`, `channel4444 ps`,
+    `channel4444-password` (show or change the access password)
+- **Admin password on the server:** `ADMIN_PASSWORD` in `/opt/channel4444/.env.prod`.
+  `setup.sh` generates one if it's missing. Show it with
+  `grep ADMIN_PASSWORD /opt/channel4444/.env.prod`. After changing it, run `channel4444 up -d`.
+- **Changes to `setup.sh`** (new env variables, proxy or TURN config) only take effect when you
+  run it again: `DOMAIN=<your domain> bash /opt/channel4444/setup.sh`. It's safe to re-run, and existing
+  secrets are kept. Code-only changes just need `channel4444-update`.
 
 ## Configuration (environment variables)
 
@@ -40,6 +72,7 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 | --- | --- |
 | `PORT` | HTTP port (default `4444`) |
 | `ACCESS_PASSWORD` | If set, the whole app is locked behind this shared password |
+| `ADMIN_PASSWORD` | Password for `/admin`. If it's not set, the admin page is turned off |
 | `SSL_KEY`, `SSL_CERT` | Paths to a key and certificate to serve over HTTPS |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | TURN server for peers behind strict NATs |
 

@@ -28,11 +28,19 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - The same page is used to edit your profile later ("Edit profile" on the main page).
 - No accounts or passwords per user: the identity is stored in the browser.
 
-## 4. Privacy
+## 4. Admin page (`/admin`)
+- Protected by its own password (`ADMIN_PASSWORD`); turned off if that isn't set.
+- VS Code-style layout: a narrow activity bar on the left with icon buttons, and content on the right.
+- Activity bar buttons (one for now):
+  - **Users**: a list of all registered users with avatar, name, ID, registration date,
+    status (online / in video chat / offline) and message count; searchable by name or ID.
+- Sign out button; admin sessions expire after 12 hours.
+
+## 5. Privacy
 - Optional shared access password for the whole app (`ACCESS_PASSWORD`).
 - Video and audio go directly between browsers (WebRTC); the server only relays the connection setup.
 
-## 5. Known limits
+## 6. Known limits
 - Camera/mic need HTTPS unless you're on localhost.
 - Group video works well for about 6 people, because every participant connects to every other one.
 - Some networks need a TURN server (configured with the `TURN_*` variables).

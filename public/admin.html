@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin – channel4444</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+  <!-- Login -->
+  <div class="admin-login hidden" id="login-view">
+    <form class="card" id="login-form">
+      <div class="brand">channel<span>4444</span> admin</div>
+      <h1>Admin sign in</h1>
+      <label class="field">Admin password
+        <input type="password" id="admin-password" required autofocus>
+      </label>
+      <p class="error" id="login-error"></p>
+      <div class="actions"><button class="btn primary" type="submit">Sign in</button></div>
+    </form>
+  </div>
+
+  <!-- Disabled -->
+  <div class="admin-login hidden" id="disabled-view">
+    <div class="card">
+      <div class="brand">channel<span>4444</span> admin</div>
+      <h1>Admin is disabled</h1>
+      <p class="hint">Start the server with the <code>ADMIN_PASSWORD</code> environment variable to turn on the admin page.</p>
+    </div>
+  </div>
+
+  <!-- Workbench -->
+  <div class="workbench hidden" id="app-view">
+    <nav class="activity-bar">
+      <button class="activity active" data-view="users" title="Users" aria-label="Users">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="8" r="3.5"/>
+          <path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/>
+          <circle cx="17" cy="9" r="2.8"/>
+          <path d="M16 13.6c3.1-.4 5.5 2 5.5 5.4"/>
+        </svg>
+      </button>
+    </nav>
+
+    <main class="editor">
+      <header class="editor-header">
+        <div class="tab">Users <span class="count" id="users-count">0</span></div>
+        <div class="editor-actions">
+          <input type="text" id="users-search" placeholder="Search by name or ID" autocomplete="off">
+          <button class="btn small" id="refresh">Refresh</button>
+          <button class="btn ghost small" id="logout">Sign out</button>
+        </div>
+      </header>
+
+      <section class="view" id="view-users">
+        <table class="users-table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>ID</th>
+              <th>Registered</th>
+              <th>Status</th>
+              <th class="num">Messages</th>
+            </tr>
+          </thead>
+          <tbody id="users-body"></tbody>
+        </table>
+        <p class="empty" id="users-empty">No users yet</p>
+      </section>
+    </main>
+  </div>
+
+  <script src="/common.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

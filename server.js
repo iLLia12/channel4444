@@ -10,6 +10,8 @@ const { Server } = require('socket.io');
 const PORT = Number(process.env.PORT) || 4444;
 // Optional shared password that gates the whole app.
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
+// Password for the /admin page. The admin page is disabled when this is not set.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -93,6 +95,25 @@ function hasAccess(cookieHeader) {
   return !!c && safeEqual(c, accessToken);
 }
 
+const ADMIN_COOKIE = 'c4_admin';
+const adminToken = ADMIN_PASSWORD
+  ? crypto.createHash('sha256').update('channel4444-admin:' + ADMIN_PASSWORD).digest('hex')
+  : null;
+
+function isAdmin(cookieHeader) {
+  if (!adminToken) return false;
+  const c = parseCookies(cookieHeader)[ADMIN_COOKIE];
+  return !!c && safeEqual(c, adminToken);
+}
+
+function setCookie(req, res, name, value, maxAge) {
+  const secure = req.secure ? '; Secure' : '';
+  res.setHeader(
+    'Set-Cookie',
+    `${name}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`
+  );
+}
+
 // ---------- uploads ----------
 
 const IMAGE_TYPES = {
@@ -154,17 +175,62 @@ app.post('/api/login', (req, res) => {
   if (!safeEqual(req.body && req.body.password, ACCESS_PASSWORD)) {
     return res.status(401).json({ error: 'Wrong password' });
   }
-  const secure = req.secure ? '; Secure' : '';
-  res.setHeader(
-    'Set-Cookie',
-    `${ACCESS_COOKIE}=${accessToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${60 * 60 * 24 * 365}${secure}`
-  );
+  setCookie(req, res, ACCESS_COOKIE, accessToken, 60 * 60 * 24 * 365);
   res.json({ ok: true });
 });
 
-const PUBLIC_WHEN_LOCKED = new Set(['/login.html', '/style.css', '/login.js', '/favicon.ico']);
+// ---------- admin ----------
+
+app.get('/api/admin/session', (req, res) => {
+  res.json({ enabled: !!adminToken, loggedIn: isAdmin(req.headers.cookie) });
+});
+
+app.post('/api/admin/login', (req, res) => {
+  if (!adminToken) return res.status(403).json({ error: 'Admin is disabled. Set ADMIN_PASSWORD.' });
+  if (!safeEqual(req.body && req.body.password, ADMIN_PASSWORD)) {
+    // Slow down password guessing.
+    return setTimeout(() => res.status(401).json({ error: 'Wrong password' }), 1000);
+  }
+  setCookie(req, res, ADMIN_COOKIE, adminToken, 60 * 60 * 12);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  setCookie(req, res, ADMIN_COOKIE, '', 0);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/users', (req, res) => {
+  if (!isAdmin(req.headers.cookie)) return res.status(401).json({ error: 'unauthorized' });
+  const messageCounts = {};
+  for (const m of messages) messageCounts[m.userId] = (messageCounts[m.userId] || 0) + 1;
+  const inVideo = new Set(videoParticipants.values());
+  const list = Object.values(users)
+    .map((u) => ({
+      ...publicUser(u),
+      createdAt: u.createdAt,
+      online: userSockets.has(u.id),
+      inVideo: inVideo.has(u.id),
+      messages: messageCounts[u.id] || 0,
+    }))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  res.json(list);
+});
+
+const PUBLIC_WHEN_LOCKED = new Set([
+  '/login.html',
+  '/style.css',
+  '/login.js',
+  '/favicon.ico',
+  '/admin',
+  '/admin.html',
+  '/admin.js',
+  '/admin.css',
+  '/common.js',
+]);
 app.use((req, res, next) => {
-  if (hasAccess(req.headers.cookie) || PUBLIC_WHEN_LOCKED.has(req.path)) return next();
+  const allowed = hasAccess(req.headers.cookie) || isAdmin(req.headers.cookie);
+  if (allowed || PUBLIC_WHEN_LOCKED.has(req.path)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'unauthorized' });
   res.redirect('/login.html');
 });
@@ -379,4 +445,5 @@ server.listen(PORT, () => {
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`channel4444 running at ${proto}://localhost:${PORT}`);
   if (ACCESS_PASSWORD) console.log('Access password is enabled.');
+  console.log(ADMIN_PASSWORD ? 'Admin page enabled at /admin.' : 'Admin page disabled (set ADMIN_PASSWORD).');
 });
