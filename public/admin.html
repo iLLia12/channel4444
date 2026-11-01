@@ -62,6 +62,7 @@
               <th>Registered</th>
               <th>Status</th>
               <th class="num">Messages</th>
+              <th class="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody id="users-body"></tbody>
@@ -70,6 +71,23 @@
       </section>
     </main>
   </div>
+
+  <dialog class="card modal" id="delete-dialog">
+    <form method="dialog" id="delete-form">
+      <h1>Delete user</h1>
+      <p>Delete <strong id="delete-name"></strong>? This can't be undone. They will be signed out
+        right away and can only come back by creating a new user.</p>
+      <label class="checkbox"><input type="checkbox" id="delete-messages">
+        Also delete their <span id="delete-count"></span> messages and photos</label>
+      <p class="error" id="delete-error"></p>
+      <div class="actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn danger" value="confirm" id="delete-confirm">Delete user</button>
+      </div>
+    </form>
+  </dialog>
+
+  <p class="toast hidden" id="toast"></p>
 
   <script src="/common.js"></script>
   <script src="/admin.js"></script>

@@ -44,7 +44,15 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - VS Code-style layout: a narrow activity bar on the left with icon buttons, and content on the right.
 - Activity bar buttons (one for now):
   - **Users**: a list of all registered users with avatar, name, ID, registration date,
-    status (online / in video chat / offline) and message count; searchable by name or ID.
+    status (online / in video chat / suspended / offline) and message count; searchable by name or ID.
+  - **Suspend / Unsuspend** a user (asks to confirm). A suspended user is disconnected immediately
+    (also from the video call) and sees an "account suspended" page. They can't chat, post photos,
+    edit their profile or join the call until unsuspended. Their messages stay.
+  - **Delete** a user (confirmation dialog). They are disconnected immediately and sent to the
+    create-user page. Optionally also deletes all their messages and photos (checkbox in the dialog);
+    otherwise their messages stay.
+  - Limitation: there are no per-user passwords, so a suspended or deleted person can clear their
+    browser data and create a new user. To lock someone out completely, change `ACCESS_PASSWORD`.
 - Sign out button; admin sessions expire after 12 hours.
 
 ## 5. Privacy

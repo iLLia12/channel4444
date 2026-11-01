@@ -89,3 +89,28 @@
 }
 .badge.online { background: rgba(60, 207, 145, .15); color: var(--ok); }
 .badge.video { background: rgba(229, 72, 77, .15); color: var(--danger); }
+.badge.suspended { background: rgba(245, 166, 35, .15); color: #f5a623; }
+
+.users-table .actions-col { text-align: right; white-space: nowrap; }
+.users-table td.actions-col .btn + .btn { margin-left: 6px; }
+.btn.warn { border-color: rgba(245, 166, 35, .5); color: #f5a623; background: transparent; }
+
+.modal { color: var(--text); max-width: 440px; padding: 24px; }
+.modal::backdrop { background: rgba(0, 0, 0, .6); }
+.modal h1 { margin-top: 0; }
+.modal p { color: var(--muted); }
+.modal strong { color: var(--text); }
+.checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
+}

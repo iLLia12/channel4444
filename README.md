@@ -49,7 +49,15 @@ The admin page is turned off when `ADMIN_PASSWORD` isn't set.
 The layout copies VS Code: a narrow activity bar on the left, with one button for now:
 
 - **Users**: every registered user with their avatar, name, ID, registration date,
-  status (online, in video chat, or offline) and number of chat messages. You can search by name or ID.
+  status (online, in video chat, suspended, or offline) and number of chat messages. You can search by name or ID.
+  - **Suspend**: disconnects the user right away. They see an "account suspended" page until you
+    click **Unsuspend**. Their messages stay.
+  - **Delete**: removes the user and signs them out right away. Tick the box in the dialog to
+    also delete all their messages and photos.
+
+  There are no per-user passwords, so a suspended or deleted person can clear their browser data
+  and create a new user. To lock someone out completely, change `ACCESS_PASSWORD`
+  (`channel4444-password NEWPASS` on the server).
 
 Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin session lasts 12 hours.
 

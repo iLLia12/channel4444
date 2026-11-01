@@ -77,6 +77,10 @@ form.addEventListener('submit', async (e) => {
       return;
     }
     const body = await res.json();
+    if (body.suspended) {
+      location.replace('/suspended.html');
+      return;
+    }
     if (!res.ok) throw new Error(body.error || 'Something went wrong');
     Store.user = body;
     location.href = '/';

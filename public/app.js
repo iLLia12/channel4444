@@ -31,6 +31,19 @@ socket.on('connect_error', (err) => {
     location.replace('/create.html');
   } else if (err.message === 'unauthorized') {
     location.replace('/login.html');
+  } else if (err.message === 'suspended') {
+    location.replace('/suspended.html');
+  }
+});
+
+// The admin suspended or deleted us while we were online.
+socket.on('account', ({ status }) => {
+  if (video.joined) leaveVideo();
+  if (status === 'suspended') {
+    location.replace('/suspended.html');
+  } else if (status === 'deleted') {
+    Store.user = null;
+    location.replace('/create.html');
   }
 });
 
@@ -319,6 +332,7 @@ $('photo-input').addEventListener('change', async (e) => {
       body: data,
     });
     const body = await res.json();
+    if (body.suspended) return location.replace('/suspended.html');
     if (!res.ok) throw new Error(body.error || 'Upload failed');
     input.value = '';
     $('chat-error').textContent = '';

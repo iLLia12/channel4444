@@ -200,8 +200,12 @@ app.post('/api/admin/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/admin/users', (req, res) => {
+function requireAdmin(req, res, next) {
   if (!isAdmin(req.headers.cookie)) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.get('/api/admin/users', requireAdmin, (req, res) => {
   const messageCounts = {};
   for (const m of messages) messageCounts[m.userId] = (messageCounts[m.userId] || 0) + 1;
   const inVideo = new Set(videoParticipants.values());
@@ -212,9 +216,44 @@ app.get('/api/admin/users', (req, res) => {
       online: userSockets.has(u.id),
       inVideo: inVideo.has(u.id),
       messages: messageCounts[u.id] || 0,
+      suspended: !!u.suspended,
+      suspendedAt: u.suspendedAt || null,
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
   res.json(list);
+});
+
+app.post('/api/admin/users/:id/suspend', requireAdmin, (req, res) => {
+  const user = users[req.params.id];
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const suspended = !!(req.body && req.body.suspended);
+  user.suspended = suspended;
+  user.suspendedAt = suspended ? Date.now() : null;
+  saveUsers();
+  if (suspended) kickUser(user.id, 'suspended');
+  res.json({ ok: true, suspended });
+});
+
+app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const user = users[req.params.id];
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  kickUser(user.id, 'deleted');
+  let deletedMessages = 0;
+  if (req.query.messages === '1') {
+    const theirs = messages.filter((m) => m.userId === user.id);
+    messages = messages.filter((m) => m.userId !== user.id);
+    for (const m of theirs) {
+      if (m.image) removeUploadedFile(m.image.url);
+      io.to('lobby').emit('chat:deleted', { id: m.id });
+    }
+    deletedMessages = theirs.length;
+    saveMessages();
+  }
+  removeUploadedFile(user.avatar);
+  delete users[user.id];
+  saveUsers();
+  broadcastDirectory();
+  res.json({ ok: true, deletedMessages });
 });
 
 const PUBLIC_WHEN_LOCKED = new Set([
@@ -275,6 +314,10 @@ app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
     removeUpload(req.file);
     return res.status(401).json({ error: 'Unknown user' });
   }
+  if (user.suspended) {
+    removeUpload(req.file);
+    return res.status(403).json({ error: 'Your account is suspended', suspended: true });
+  }
   const name = cleanName(req.body.name);
   if (!name) {
     removeUpload(req.file);
@@ -299,6 +342,10 @@ app.post('/api/messages/photo', runUpload(photoUpload), (req, res) => {
   if (!user) {
     removeUpload(req.file);
     return res.status(401).json({ error: 'Unknown user' });
+  }
+  if (user.suspended) {
+    removeUpload(req.file);
+    return res.status(403).json({ error: 'Your account is suspended', suspended: true });
   }
   if (!req.file) return res.status(400).json({ error: 'No photo' });
   const msg = addMessage(user, String(req.body.text || ''), {
@@ -351,6 +398,16 @@ function broadcastVideo() {
   io.to('lobby').emit('video:participants', videoList());
 }
 
+// Tell every open tab of a user why, then disconnect it (presence and video clean up on disconnect).
+function kickUser(userId, status) {
+  for (const sid of userSockets.get(userId) || []) {
+    const s = io.sockets.sockets.get(sid);
+    if (!s) continue;
+    s.emit('account', { status });
+    s.disconnect(true);
+  }
+}
+
 function broadcastDirectory() {
   io.to('lobby').emit('users', directory());
 }
@@ -375,6 +432,7 @@ io.use((socket, next) => {
   const { userId, token } = socket.handshake.auth || {};
   const user = authUser(userId, token);
   if (!user) return next(new Error('unknown_user'));
+  if (user.suspended) return next(new Error('suspended'));
   socket.data.userId = user.id;
   next();
 });
@@ -396,7 +454,7 @@ io.on('connection', (socket) => {
 
   socket.on('chat:send', (payload) => {
     const text = String((payload && payload.text) || '').trim();
-    if (!text || !users[userId]) return;
+    if (!text || !users[userId] || users[userId].suspended) return;
     addMessage(users[userId], text, null);
   });
 
