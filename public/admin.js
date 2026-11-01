@@ -60,11 +60,82 @@ function statusBadge(u) {
   return el('span', { class: 'badge', text: 'Offline' });
 }
 
+// Static SVG markup (VS Code codicon style), never user data.
+const ICONS = {
+  pause: '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><rect x="4" y="3" width="2.5" height="10" rx=".5"/><rect x="9.5" y="3" width="2.5" height="10" rx=".5"/></svg>',
+  play: '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M5 3.2v9.6a.5.5 0 0 0 .77.42l7.2-4.8a.5.5 0 0 0 0-.84l-7.2-4.8A.5.5 0 0 0 5 3.2z"/></svg>',
+  trash: '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5"/></svg>',
+};
+
+function iconButton(icon, label, cls, onclick) {
+  const b = el('button', { class: 'icon-btn ' + cls, title: label, 'aria-label': label, onclick });
+  b.innerHTML = ICONS[icon];
+  return b;
+}
+
+// ---------- sorting ----------
+
+const SORT_KEY = 'c4_admin_users_sort';
+let sort = { field: 'createdAt', dir: 'desc' };
+try {
+  sort = { ...sort, ...JSON.parse(localStorage.getItem(SORT_KEY)) };
+} catch {}
+
+// Status sorts by "how active": in video > online > offline > suspended.
+const statusRank = (u) => (u.suspended ? 0 : u.inVideo ? 3 : u.online ? 2 : 1);
+const SORTERS = {
+  name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  id: (a, b) => a.id.localeCompare(b.id),
+  createdAt: (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
+  status: (a, b) => statusRank(a) - statusRank(b),
+  messages: (a, b) => a.messages - b.messages,
+};
+// First click on text columns sorts A→Z; on numbers, dates and status, biggest/newest/most active first.
+const FIRST_DIR = { name: 'asc', id: 'asc', createdAt: 'desc', status: 'desc', messages: 'desc' };
+
+function sortedUsers(list) {
+  const cmp = SORTERS[sort.field] || SORTERS.createdAt;
+  const sign = sort.dir === 'asc' ? 1 : -1;
+  // Ties fall back to name so the order is stable and predictable.
+  return [...list].sort((a, b) => sign * cmp(a, b) || SORTERS.name(a, b));
+}
+
+function renderSortHeaders() {
+  for (const th of document.querySelectorAll('#users-head th[data-sort]')) {
+    const active = th.dataset.sort === sort.field;
+    th.classList.toggle('sorted', active);
+    th.dataset.dir = active ? sort.dir : '';
+    th.setAttribute('aria-sort', active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  }
+}
+
+for (const th of document.querySelectorAll('#users-head th[data-sort]')) {
+  th.tabIndex = 0;
+  const activate = () => {
+    const field = th.dataset.sort;
+    sort =
+      sort.field === field
+        ? { field, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { field, dir: FIRST_DIR[field] || 'asc' };
+    localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+    renderUsers();
+  };
+  th.addEventListener('click', activate);
+  th.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
+  });
+}
+
 function renderUsers() {
   const q = $('users-search').value.trim().toLowerCase();
-  const list = q
+  const filtered = q
     ? allUsers.filter((u) => u.name.toLowerCase().includes(q) || u.id.includes(q))
     : allUsers;
+  const list = sortedUsers(filtered);
+  renderSortHeaders();
   $('users-body').replaceChildren(
     ...list.map((u) =>
       el(
@@ -78,12 +149,10 @@ function renderUsers() {
         el(
           'td',
           { class: 'actions-col' },
-          el('button', {
-            class: 'btn small' + (u.suspended ? '' : ' warn'),
-            text: u.suspended ? 'Unsuspend' : 'Suspend',
-            onclick: () => toggleSuspend(u),
-          }),
-          el('button', { class: 'btn small danger', text: 'Delete', onclick: () => openDelete(u) })
+          u.suspended
+            ? iconButton('play', `Unsuspend ${u.name}`, 'ok', () => toggleSuspend(u))
+            : iconButton('pause', `Suspend ${u.name}`, 'warn', () => toggleSuspend(u)),
+          iconButton('trash', `Delete ${u.name}`, 'danger', () => openDelete(u))
         )
       )
     )

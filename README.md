@@ -50,6 +50,8 @@ The layout copies VS Code: a narrow activity bar on the left, with one button fo
 
 - **Users**: every registered user with their avatar, name, ID, registration date,
   status (online, in video chat, suspended, or offline) and number of chat messages. You can search by name or ID.
+  - **Sort** by any column: click its header, then click again to reverse. Your choice is remembered.
+  - Each row has two icon buttons: **⏸ suspend** (▶ to unsuspend) and **🗑 delete**.
   - **Suspend**: disconnects the user right away. They see an "account suspended" page until you
     click **Unsuspend**. Their messages stay.
   - **Delete**: removes the user and signs them out right away. Tick the box in the dialog to

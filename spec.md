@@ -45,6 +45,10 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - Activity bar buttons (one for now):
   - **Users**: a list of all registered users with avatar, name, ID, registration date,
     status (online / in video chat / suspended / offline) and message count; searchable by name or ID.
+  - Click any column header (User, ID, Registered, Status, Messages) to sort; click again to reverse.
+    An arrow shows the current sort, and it is remembered in the browser. Status sorts by activity:
+    in video chat → online → offline → suspended.
+  - Row actions are icon buttons (with tooltips): pause = suspend, play = unsuspend, trash = delete.
   - **Suspend / Unsuspend** a user (asks to confirm). A suspended user is disconnected immediately
     (also from the video call) and sees an "account suspended" page. They can't chat, post photos,
     edit their profile or join the call until unsuspended. Their messages stay.
