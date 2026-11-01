@@ -101,6 +101,9 @@ Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
 - Video is peer-to-peer (WebRTC mesh); the server only relays signaling. That works well
   for small groups (about 6 people). Some networks need a TURN server to connect.
 - Data (users, last 500 messages, uploaded images) is stored in `data/`.
+- **Caching:** pages are never cached. Scripts and styles are linked as `file.js?v=<hash>`, and the
+  hash changes whenever any file in `public/` changes. After a deploy, a normal reload gets the new
+  version, even though Cloudflare tells browsers to cache `.js`/`.css` for hours.
 
 ## Troubleshooting: video stuck on "connecting…"
 

@@ -7,6 +7,7 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - Runs on port **4444** by default (port 3000 was taken). Set `PORT` to change it.
 - Can run with Docker (`docker compose up -d --build`).
 - Production: hosted on DigitalOcean, with the domain registered through Cloudflare.
+- After a deploy, a normal page reload always loads the new version (no hard refresh needed).
 
 ## 2. Main page
 - **Text chat**

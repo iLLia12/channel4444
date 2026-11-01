@@ -363,7 +363,46 @@ app.use(
     setHeaders: (res) => res.setHeader('Content-Security-Policy', "default-src 'none'"),
   })
 );
-app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+// ---------- pages and static assets ----------
+// Cloudflare tells browsers to cache .js/.css for hours, so after a deploy people kept running
+// old scripts. Pages are never cached and link to assets as /file.js?v=<hash of all assets>,
+// so every deploy changes the URLs and browsers fetch the new files straight away.
+
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const ASSET_VERSION = (() => {
+  const hash = crypto.createHash('sha1');
+  for (const name of fs.readdirSync(PUBLIC_DIR).sort()) {
+    const file = path.join(PUBLIC_DIR, name);
+    if (fs.statSync(file).isFile()) hash.update(name).update(fs.readFileSync(file));
+  }
+  return hash.digest('hex').slice(0, 10);
+})();
+
+const pageCache = new Map();
+function renderPage(file) {
+  if (!pageCache.has(file)) {
+    const html = fs
+      .readFileSync(path.join(PUBLIC_DIR, file), 'utf8')
+      .replace(/((?:src|href)="\/[\w.-]+\.(?:js|css))"/g, `$1?v=${ASSET_VERSION}"`);
+    pageCache.set(file, html);
+  }
+  return pageCache.get(file);
+}
+
+app.get(/^\/(?:[\w-]+(?:\.html)?)?$/, (req, res, next) => {
+  const name = req.path === '/' ? 'index' : req.path.slice(1).replace(/\.html$/, '');
+  const file = name + '.html';
+  if (!fs.existsSync(path.join(PUBLIC_DIR, file))) return next();
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(renderPage(file));
+});
+
+app.use((req, res, next) => {
+  // Versioned URLs never change content; everything else must be revalidated.
+  res.set('Cache-Control', req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache');
+  next();
+});
+app.use(express.static(PUBLIC_DIR, { extensions: ['html'], cacheControl: false }));
 
 // ---------- realtime ----------
 
