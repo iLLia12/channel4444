@@ -34,6 +34,8 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 - **Video chat**: you see and hear nothing until you click **Connect to video chat**.
   Several people can join. You get mic/camera toggles and a Leave button. A green bar on your
   own tile shows your mic level. A red notice appears if others can't hear or see you.
+  Other people's tiles show a blue bar for the audio arriving from them, and "No audio received"
+  if none is.
 - **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
 
@@ -112,3 +114,10 @@ The TURN relay is reached by the server's IP address, not the domain, because a 
 3. **Close other apps using the mic** (Zoom, Teams, Discord, another browser tab), then leave and rejoin.
 4. **The other person sees "Click to turn on sound"** when their browser blocked autoplay. They
    need to click it.
+5. **Ask the other person to look at the blue bar on your tile** while you talk:
+   - **"No audio received"**: your audio isn't reaching them. Check steps 1–3 on your side.
+   - **The bar moves but they hear nothing**: the audio arrives, so the problem is playback on
+     their device. Check their volume, the browser tab isn't muted, and their output device
+     (system sound settings). On iPhone, sound may come out of the quiet earpiece; using headphones fixes it.
+6. **Testing in the same home:** mute one laptop's speakers or use headphones. Otherwise you may be
+   hearing each other through the air, not through the app.

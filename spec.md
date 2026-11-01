@@ -21,7 +21,9 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
   - If camera/mic access is denied, the user joins to watch and listen only.
   - If the mic or camera isn't available (blocked, busy in another app, missing), the user still joins
     with whatever works, and a red notice says who can't hear or see them and how to fix it.
-  - Your own tile shows a live microphone level bar.
+  - Your own tile shows a live microphone level bar (green).
+  - Each other person's tile shows a level bar for the audio arriving from them (blue), and a red
+    "No audio received" label if no audio is reaching you from them.
   - If the browser blocks sound from playing automatically, the tile shows a "Click to turn on sound" button.
 - **List of users currently in the video chat**
 - **Separate list of users currently in the app** (everyone with the main page open)

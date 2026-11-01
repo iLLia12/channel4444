@@ -295,7 +295,9 @@ function makeTile(key, label, stream, isLocal) {
     vid,
     el('div', { class: 'tile-placeholder' }),
     nameEl,
-    isLocal ? null : el('button', { class: 'btn primary tile-play', text: '🔊 Click to turn on sound', onclick: playAllRemote })
+    isLocal ? null : el('button', { class: 'btn primary tile-play', text: '🔊 Click to turn on sound', onclick: playAllRemote }),
+    isLocal ? null : el('div', { class: 'mic-meter audio-meter', title: 'Incoming audio level' }, el('span')),
+    isLocal ? null : el('span', { class: 'audio-status', text: '🔇 No audio received' })
   );
   $('video-grid').append(tile);
   layoutGrid();
@@ -345,13 +347,16 @@ function createPeer(socketId, userId) {
     if (e.candidate) socket.emit('video:signal', { to: socketId, candidate: e.candidate });
   };
   pc.ontrack = (e) => {
-    stream.addTrack(e.track);
-    const refresh = () => updateTilePlaceholder(peer.tile, stream, userById(userId));
+    console.log(`[video] ${userById(userId).name}: receiving ${e.track.kind}`);
+    // A fresh stream object makes every browser (notably Safari) pick up all tracks;
+    // adding a track to a stream that's already playing can leave it silent.
+    peer.stream = new MediaStream([...peer.stream.getTracks().filter((t) => t.kind !== e.track.kind), e.track]);
+    const refresh = () => updateTilePlaceholder(peer.tile, peer.stream, userById(userId));
     e.track.onmute = refresh;
     e.track.onunmute = refresh;
     e.track.onended = refresh;
     refresh();
-    peer.tile.querySelector('video').srcObject = stream;
+    peer.tile.querySelector('video').srcObject = peer.stream;
     playRemote(peer);
   };
   pc.onconnectionstatechange = () => {
@@ -370,7 +375,9 @@ function playRemote(peer) {
     .play()
     .then(() => peer.tile.classList.remove('needs-click'))
     .catch((err) => {
-      console.warn('[video] autoplay blocked', err.name);
+      // AbortError just means a newer srcObject replaced this one; only NotAllowedError is a real block.
+      if (err.name !== 'NotAllowedError') return;
+      console.warn('[video] autoplay blocked');
       peer.tile.classList.add('needs-click');
     });
 }
@@ -406,6 +413,36 @@ function stopMicMeter() {
   cancelAnimationFrame(video.meterFrame);
   if (video.audioCtx) video.audioCtx.close().catch(() => {});
   video.audioCtx = null;
+}
+
+// Shows, on each remote tile, whether their audio actually reaches us. If the bar moves
+// but you hear nothing, the problem is local playback (volume, output device, autoplay).
+function startAudioMonitor() {
+  video.levelTimer = setInterval(() => {
+    for (const peer of video.peers.values()) {
+      const receiver = peer.pc.getReceivers().find((r) => r.track && r.track.kind === 'audio');
+      const src = receiver && receiver.getSynchronizationSources ? receiver.getSynchronizationSources()[0] : null;
+      const level = src && typeof src.audioLevel === 'number' ? src.audioLevel : 0;
+      peer.tile.querySelector('.audio-meter span').style.width = Math.min(100, Math.sqrt(level) * 140) + '%';
+    }
+  }, 150);
+  video.statsTimer = setInterval(async () => {
+    for (const peer of video.peers.values()) {
+      if (peer.pc.connectionState !== 'connected') continue;
+      let bytes = 0;
+      (await peer.pc.getStats()).forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') bytes += r.bytesReceived || 0;
+      });
+      const flowing = bytes > (peer.audioBytes || 0);
+      peer.audioBytes = bytes;
+      peer.tile.classList.toggle('no-audio', !flowing);
+    }
+  }, 2000);
+}
+
+function stopAudioMonitor() {
+  clearInterval(video.levelTimer);
+  clearInterval(video.statsTimer);
 }
 
 // Tell the user plainly when others can't hear or see them.
@@ -535,6 +572,7 @@ async function joinVideo() {
     const local = makeTile('local', userById(me.id).name + ' (you)', video.localStream, true);
     updateTilePlaceholder(local, video.localStream, userById(me.id));
     startMicMeter(local);
+    startAudioMonitor();
     updateControls();
     socket.emit('video:join');
   } catch (err) {
@@ -550,6 +588,7 @@ function leaveVideo() {
   socket.emit('video:leave');
   for (const id of [...video.peers.keys()]) removePeer(id);
   stopMicMeter();
+  stopAudioMonitor();
   if (video.localStream) video.localStream.getTracks().forEach((t) => t.stop());
   video.localStream = null;
   video.joined = false;

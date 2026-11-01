@@ -224,6 +224,18 @@ h2 {
   display: none;
 }
 .tile.needs-click .tile-play { display: inline-flex; }
+.audio-meter span { background: var(--accent); }
+.audio-status {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(229, 72, 77, .85);
+  font-size: 12px;
+  display: none;
+}
+.tile.no-audio .audio-status { display: inline-block; }
 
 /* ---------- chat ---------- */
 
