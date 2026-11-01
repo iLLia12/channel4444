@@ -153,9 +153,9 @@ function removeUpload(file) {
   if (file) fs.unlink(file.path, () => {});
 }
 
-function removeAvatarFile(avatar) {
-  if (avatar && avatar.startsWith('/uploads/')) {
-    fs.unlink(path.join(UPLOAD_DIR, path.basename(avatar)), () => {});
+function removeUploadedFile(url) {
+  if (url && url.startsWith('/uploads/')) {
+    fs.unlink(path.join(UPLOAD_DIR, path.basename(url)), () => {});
   }
 }
 
@@ -282,10 +282,10 @@ app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
   }
   user.name = name;
   if (req.file) {
-    removeAvatarFile(user.avatar);
+    removeUploadedFile(user.avatar);
     user.avatar = '/uploads/' + req.file.filename;
   } else if (req.body.removeAvatar === '1') {
-    removeAvatarFile(user.avatar);
+    removeUploadedFile(user.avatar);
     user.avatar = null;
   }
   saveUsers();
@@ -398,6 +398,41 @@ io.on('connection', (socket) => {
     const text = String((payload && payload.text) || '').trim();
     if (!text || !users[userId]) return;
     addMessage(users[userId], text, null);
+  });
+
+  // Only the author may edit or delete a message.
+  const ownMessage = (payload) => {
+    const id = payload && typeof payload.id === 'string' ? payload.id : '';
+    const msg = messages.find((m) => m.id === id);
+    return msg && msg.userId === userId ? msg : null;
+  };
+  const reply = (ack, body) => {
+    if (typeof ack === 'function') ack(body);
+  };
+
+  socket.on('chat:edit', (payload, ack) => {
+    const msg = ownMessage(payload);
+    if (!msg) return reply(ack, { error: 'You can only edit your own messages' });
+    const text = String((payload && payload.text) || '').trim().slice(0, MAX_TEXT);
+    // A photo may lose its caption; a text message can't become empty (delete it instead).
+    if (!text && !msg.image) return reply(ack, { error: 'Message is empty' });
+    if (text !== msg.text) {
+      msg.text = text;
+      msg.editedAt = Date.now();
+      saveMessages();
+      io.to('lobby').emit('chat:updated', msg);
+    }
+    reply(ack, { ok: true });
+  });
+
+  socket.on('chat:delete', (payload, ack) => {
+    const msg = ownMessage(payload);
+    if (!msg) return reply(ack, { error: 'You can only delete your own messages' });
+    messages = messages.filter((m) => m !== msg);
+    if (msg.image) removeUploadedFile(msg.image.url);
+    saveMessages();
+    io.to('lobby').emit('chat:deleted', { id: msg.id });
+    reply(ack, { ok: true });
   });
 
   socket.on('video:join', () => {

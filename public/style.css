@@ -257,6 +257,40 @@ h2 {
 .msg.mine .msg-name { color: var(--accent); }
 .msg-meta time { color: var(--muted); font-size: 11px; }
 .msg-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-edited { color: var(--muted); font-size: 11px; }
+.msg-actions { margin-left: auto; display: none; gap: 10px; }
+.msg.mine:hover .msg-actions, .msg-actions:focus-within { display: inline-flex; }
+.msg.editing .msg-actions { display: none; }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--text); text-decoration: underline; }
+.link-btn.danger:hover { color: var(--danger); }
+.msg-editor { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.msg-edit-input {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.msg-edit-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.msg-edit-actions .hint { margin: 0 auto 0 0; }
+.msg-edit-actions .error { margin: 0; }
+@media (hover: none) {
+  /* Touch screens have no hover: always show the actions on your own messages. */
+  .msg.mine .msg-actions { display: inline-flex; }
+}
 .msg-photo { margin: 4px 0; }
 .msg-photo img {
   display: block;

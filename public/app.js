@@ -142,8 +142,9 @@ function linkify(text) {
   return frag;
 }
 
-function appendMessage(m) {
+function renderMessage(m) {
   const u = userById(m.userId);
+  const mine = m.userId === me.id;
   const body = el('div', { class: 'msg-body' });
   if (m.image) {
     body.append(
@@ -167,7 +168,7 @@ function appendMessage(m) {
 
   const node = el(
     'div',
-    { class: 'msg' + (m.userId === me.id ? ' mine' : ''), 'data-user': m.userId },
+    { class: 'msg' + (mine ? ' mine' : ''), 'data-user': m.userId, 'data-id': m.id },
     el('div', { class: 'msg-avatar' }, avatarEl(u, 'sm')),
     el(
       'div',
@@ -176,12 +177,82 @@ function appendMessage(m) {
         'div',
         { class: 'msg-meta' },
         el('span', { class: 'msg-name', text: u.name }),
-        el('time', { text: formatTime(m.ts), title: new Date(m.ts).toLocaleString() })
+        el('time', { text: formatTime(m.ts), title: new Date(m.ts).toLocaleString() }),
+        m.editedAt
+          ? el('span', { class: 'msg-edited', text: '(edited)', title: 'Edited ' + new Date(m.editedAt).toLocaleString() })
+          : null,
+        mine
+          ? el(
+              'span',
+              { class: 'msg-actions' },
+              el('button', { class: 'link-btn', text: 'Edit', onclick: () => startEdit(m, node) }),
+              el('button', { class: 'link-btn danger', text: 'Delete', onclick: () => deleteMessage(m) })
+            )
+          : null
       ),
       body
     )
   );
-  $('messages').append(node);
+  return node;
+}
+
+function appendMessage(m) {
+  $('messages').append(renderMessage(m));
+}
+
+function startEdit(m, node) {
+  const body = node.querySelector('.msg-body');
+  const textEl = body.querySelector('.msg-text');
+  const input = el('textarea', { class: 'msg-edit-input', rows: '2', maxlength: '4000' });
+  input.value = m.text;
+  const error = el('span', { class: 'error' });
+  const cancel = () => node.replaceWith(renderMessage(m));
+  const save = () => {
+    const text = input.value.trim();
+    if (text === m.text) return cancel();
+    if (!text && !m.image) {
+      // Emptying a text message means removing it.
+      deleteMessage(m);
+      return;
+    }
+    socket.emit('chat:edit', { id: m.id, text }, (res) => {
+      if (res && res.error) error.textContent = res.error;
+      // On success the server broadcasts chat:updated, which re-renders the message.
+    });
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      save();
+    } else if (e.key === 'Escape') {
+      cancel();
+    }
+  });
+  const editor = el(
+    'div',
+    { class: 'msg-editor' },
+    input,
+    el(
+      'div',
+      { class: 'msg-edit-actions' },
+      el('span', { class: 'hint', text: 'Enter to save · Esc to cancel' }),
+      error,
+      el('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: cancel }),
+      el('button', { class: 'btn small primary', type: 'button', text: 'Save', onclick: save })
+    )
+  );
+  if (textEl) textEl.replaceWith(editor);
+  else body.append(editor);
+  node.classList.add('editing');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function deleteMessage(m) {
+  if (!confirm(m.image ? 'Delete this photo for everyone?' : 'Delete this message for everyone?')) return;
+  socket.emit('chat:delete', { id: m.id }, (res) => {
+    if (res && res.error) $('chat-error').textContent = res.error;
+  });
 }
 
 function refreshMessageAuthors() {
@@ -206,6 +277,16 @@ socket.on('chat:message', (m) => {
   const stick = isNearBottom() || m.userId === me.id;
   appendMessage(m);
   if (stick) scrollChat(true);
+});
+
+socket.on('chat:updated', (m) => {
+  const node = $('messages').querySelector(`.msg[data-id="${m.id}"]`);
+  if (node) node.replaceWith(renderMessage(m));
+});
+
+socket.on('chat:deleted', ({ id }) => {
+  const node = $('messages').querySelector(`.msg[data-id="${id}"]`);
+  if (node) node.remove();
 });
 
 $('composer').addEventListener('submit', (e) => {

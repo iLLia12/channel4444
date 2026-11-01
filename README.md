@@ -38,6 +38,8 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
   if none is.
 - **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
+  Hover over your own message to **Edit** or **Delete** it (Enter saves, Esc cancels).
+  Changes appear for everyone right away, and edited messages are marked "(edited)".
 
 ## Admin page
 
