@@ -93,24 +93,6 @@
 
 .users-table .actions-col { text-align: right; white-space: nowrap; }
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.icon-btn + .icon-btn { margin-left: 2px; }
-.icon-btn:hover { background: var(--panel-2); }
-.icon-btn:focus-visible { outline: 1px solid var(--accent); }
-.icon-btn.warn:hover { color: #f5a623; }
-.icon-btn.ok:hover { color: var(--ok); }
-.icon-btn.danger:hover { color: var(--danger); }
 
 .users-table th[data-sort] { cursor: pointer; user-select: none; }
 .users-table th[data-sort]:hover { color: var(--text); }

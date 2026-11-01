@@ -15,8 +15,8 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
   - Photo upload: JPEG, PNG, GIF or WebP, up to 20 MB. Whatever is typed in the box is sent as the caption.
   - Photo download: click a photo to open it full size, or use the download link.
   - History: the last 500 messages are kept and shown when the page opens.
-  - Edit and delete your own messages (Edit / Delete appear when you hover over your message;
-    always visible on touch screens). Nobody can edit or delete someone else's messages.
+  - Edit and delete your own messages with icon buttons (✏️ pencil = edit, 🗑 trash = delete, with
+    tooltips). They appear when you hover over your message, and are always visible on touch screens. Nobody can edit or delete someone else's messages.
     - Editing happens in place: Enter saves, Esc cancels. Edited messages show "(edited)".
     - A photo's caption can be removed; emptying a text message deletes it instead.
     - Deleting asks for confirmation, removes the message for everyone, and deletes the photo file.

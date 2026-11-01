@@ -198,8 +198,8 @@ function renderMessage(m) {
           ? el(
               'span',
               { class: 'msg-actions' },
-              el('button', { class: 'link-btn', text: 'Edit', onclick: () => startEdit(m, node) }),
-              el('button', { class: 'link-btn danger', text: 'Delete', onclick: () => deleteMessage(m) })
+              iconButton('pencil', 'Edit message', 'sm', () => startEdit(m, node)),
+              iconButton('trash', 'Delete message', 'sm danger', () => deleteMessage(m))
             )
           : null
       ),
