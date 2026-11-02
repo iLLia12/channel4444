@@ -160,6 +160,14 @@ function linkify(text) {
   return frag;
 }
 
+// Small icon in the photo's corner. The file name isn't shown, but downloads keep it.
+function downloadLink(image) {
+  const label = `Download photo${image.size ? ' (' + formatSize(image.size) + ')' : ''}`;
+  const a = el('a', { class: 'photo-download', href: image.url, download: image.name || 'photo', title: label, 'aria-label': label });
+  a.innerHTML = ICONS.download;
+  return a;
+}
+
 function renderMessage(m, older) {
   const u = userById(m.userId);
   const mine = m.userId === me.id;
@@ -174,15 +182,11 @@ function renderMessage(m, older) {
           { href: m.image.url, target: '_blank', rel: 'noopener' },
           el('img', {
             src: m.image.url,
-            alt: m.image.name,
+            alt: 'Photo',
             onload: older ? () => keepAnchored(node) : () => scrollChat(),
           })
         ),
-        el(
-          'a',
-          { class: 'download', href: m.image.url, download: m.image.name },
-          `⬇ Download ${m.image.name} ${formatSize(m.image.size)}`.trim()
-        )
+        downloadLink(m.image)
       )
     );
   }

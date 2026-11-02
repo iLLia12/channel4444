@@ -13,7 +13,9 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - **Text chat**
   - Text messages; links are clickable.
   - Photo upload: JPEG, PNG, GIF or WebP, up to 20 MB. Whatever is typed in the box is sent as the caption.
-  - Photo download: click a photo to open it full size, or use the download link.
+  - Photo download: click a photo to open it full size, or click the small download icon in its
+    top-right corner (tooltip shows the file size). The file name is not shown in the chat, but
+    downloaded files keep their original name.
   - History: the server keeps the last 500 messages.
   - Lazy loading: opening the page loads only the newest 20 messages. Scrolling near the top loads
     the 20 before them, and so on. The messages you're reading stay in place while older ones are
