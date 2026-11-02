@@ -17,11 +17,14 @@ docker compose logs -f         # logs
 docker compose down            # stop (data is kept in the channel4444-data volume)
 ```
 
-Docker Compose reads `ADMIN_PASSWORD` and `ACCESS_PASSWORD` from a `.env` file next to
-`docker-compose.yml`. That file is git-ignored, so passwords are never committed:
+Docker Compose reads `ACCESS_PASSWORD` from a `.env` file next to `docker-compose.yml`.
+That file is git-ignored, so passwords are never committed.
+
+Create an admin account (the generated password is printed once):
 
 ```sh
-echo "ADMIN_PASSWORD=your-strong-password" > .env
+node admins.js create you@example.com                           # running with npm start
+docker compose exec app node admins.js create you@example.com   # running in Docker
 ```
 
 Open `http://localhost:4444`. On first visit you are sent to the **Create user** page
@@ -47,8 +50,20 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 
 ## Admin page
 
-Open `/admin` (e.g. `http://localhost:4444/admin`) and sign in with `ADMIN_PASSWORD`.
-The admin page is turned off when `ADMIN_PASSWORD` isn't set.
+Open `/admin` (e.g. `http://localhost:4444/admin`) and sign in with an **admin account**
+(email + password). Admin accounts are separate from chat users and live in `data/admins.json`,
+which stores only scrypt hashes, never the passwords themselves. Each password is generated and
+shown once, when the account is created or its password is reset. Sessions last 12 hours.
+Resetting a password signs out that admin everywhere.
+
+Manage admins with `node admins.js` (on the server: `channel4444-admin`):
+
+| Command | What it does |
+| --- | --- |
+| `create <email>` | Create an admin and print its generated password |
+| `reset-password <email>` | Generate a new password and print it |
+| `delete <email>` | Remove an admin |
+| `list` | List admin emails |
 
 The layout copies VS Code: a narrow activity bar on the left, with one button for now:
 
@@ -80,10 +95,11 @@ Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin 
   - Secrets: `/opt/channel4444/.env.prod`
   - Data: `/opt/channel4444/data`; backups go to `/var/backups/channel4444`
   - Commands: `channel4444-update` (pull and rebuild), `channel4444 logs -f`, `channel4444 ps`,
-    `channel4444-password` (show or change the access password)
-- **Admin password on the server:** `ADMIN_PASSWORD` in `/opt/channel4444/.env.prod`.
-  `setup.sh` generates one if it's missing. Show it with
-  `grep ADMIN_PASSWORD /opt/channel4444/.env.prod`. After changing it, run `channel4444 up -d`.
+    `channel4444-password` (show or change the access password), `channel4444-admin` (manage admins)
+- **Admin account:** `setup.sh` requires `ADMIN_EMAIL` until an admin exists. It creates that
+  admin and prints the generated password **once**, in the final summary:
+  `DOMAIN=<your domain> ADMIN_EMAIL=you@example.com bash /opt/channel4444/setup.sh`.
+  Re-running keeps existing admins. Forgot the password? Run `channel4444-admin reset-password you@example.com`.
 - **Changes to `setup.sh`** (new env variables, proxy or TURN config) only take effect when you
   run it again: `DOMAIN=<your domain> bash /opt/channel4444/setup.sh`. It's safe to re-run, and existing
   secrets are kept. Code-only changes just need `channel4444-update`.
@@ -94,7 +110,6 @@ Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin 
 | --- | --- |
 | `PORT` | HTTP port (default `4444`) |
 | `ACCESS_PASSWORD` | If set, the whole app is locked behind this shared password |
-| `ADMIN_PASSWORD` | Password for `/admin`. If it's not set, the admin page is turned off |
 | `SSL_KEY`, `SSL_CERT` | Paths to a key and certificate to serve over HTTPS |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | TURN server for peers behind strict NATs. `TURN_URL` can be comma-separated |
 

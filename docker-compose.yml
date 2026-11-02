@@ -6,8 +6,7 @@ services:
       - "4444:4444"
     environment:
       - PORT=4444
-      # Set these in a .env file next to this file (it's git-ignored).
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # Set this in a .env file next to this file (it's git-ignored).
       - ACCESS_PASSWORD=${ACCESS_PASSWORD:-}
     volumes:
       - channel4444-data:/app/data

@@ -6,12 +6,11 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const { Server } = require('socket.io');
+const admins = require('./admins');
 
 const PORT = Number(process.env.PORT) || 4444;
 // Optional shared password that gates the whole app.
 const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
-// Password for the /admin page. The admin page is disabled when this is not set.
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -136,15 +135,40 @@ function hasAccess(cookieHeader) {
   return !!c && safeEqual(c, accessToken);
 }
 
+// Admin sessions: a signed cookie "<email>.<expiry>.<signature>". The signature covers the
+// admin's password hash, so resetting the password signs out every existing session.
 const ADMIN_COOKIE = 'c4_admin';
-const adminToken = ADMIN_PASSWORD
-  ? crypto.createHash('sha256').update('channel4444-admin:' + ADMIN_PASSWORD).digest('hex')
-  : null;
+const ADMIN_SESSION_SECONDS = 60 * 60 * 12;
+const SESSION_KEY_FILE = path.join(DATA_DIR, 'session.key');
+const sessionKey = (() => {
+  try {
+    return fs.readFileSync(SESSION_KEY_FILE, 'utf8').trim();
+  } catch {
+    const key = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(SESSION_KEY_FILE, key, { mode: 0o600 });
+    return key;
+  }
+})();
+
+function signAdminSession(admin, expires) {
+  return crypto.createHmac('sha256', sessionKey).update(`${admin.email}.${expires}.${admin.hash}`).digest('base64url');
+}
+
+function adminSessionCookie(admin) {
+  const expires = Date.now() + ADMIN_SESSION_SECONDS * 1000;
+  return `${Buffer.from(admin.email).toString('base64url')}.${expires}.${signAdminSession(admin, expires)}`;
+}
+
+// The signed-in admin for this request, or null.
+function currentAdmin(cookieHeader) {
+  const [emailPart, expires, sig] = String(parseCookies(cookieHeader)[ADMIN_COOKIE] || '').split('.');
+  if (!emailPart || !sig || !(Number(expires) > Date.now())) return null;
+  const admin = admins.find(Buffer.from(emailPart, 'base64url').toString());
+  return admin && safeEqual(sig, signAdminSession(admin, expires)) ? admin : null;
+}
 
 function isAdmin(cookieHeader) {
-  if (!adminToken) return false;
-  const c = parseCookies(cookieHeader)[ADMIN_COOKIE];
-  return !!c && safeEqual(c, adminToken);
+  return !!currentAdmin(cookieHeader);
 }
 
 function setCookie(req, res, name, value, maxAge) {
@@ -223,17 +247,19 @@ app.post('/api/login', (req, res) => {
 // ---------- admin ----------
 
 app.get('/api/admin/session', (req, res) => {
-  res.json({ enabled: !!adminToken, loggedIn: isAdmin(req.headers.cookie) });
+  const admin = currentAdmin(req.headers.cookie);
+  res.json({ enabled: admins.count() > 0, loggedIn: !!admin, email: admin ? admin.email : null });
 });
 
 app.post('/api/admin/login', (req, res) => {
-  if (!adminToken) return res.status(403).json({ error: 'Admin is disabled. Set ADMIN_PASSWORD.' });
-  if (!safeEqual(req.body && req.body.password, ADMIN_PASSWORD)) {
+  if (!admins.count()) return res.status(403).json({ error: 'No admin account exists yet.' });
+  const admin = admins.verify(req.body && req.body.email, req.body && req.body.password);
+  if (!admin) {
     // Slow down password guessing.
-    return setTimeout(() => res.status(401).json({ error: 'Wrong password' }), 1000);
+    return setTimeout(() => res.status(401).json({ error: 'Wrong email or password' }), 1000);
   }
-  setCookie(req, res, ADMIN_COOKIE, adminToken, 60 * 60 * 12);
-  res.json({ ok: true });
+  setCookie(req, res, ADMIN_COOKIE, adminSessionCookie(admin), ADMIN_SESSION_SECONDS);
+  res.json({ ok: true, email: admin.email });
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -645,5 +671,6 @@ server.listen(PORT, () => {
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`channel4444 running at ${proto}://localhost:${PORT}`);
   if (ACCESS_PASSWORD) console.log('Access password is enabled.');
-  console.log(ADMIN_PASSWORD ? 'Admin page enabled at /admin.' : 'Admin page disabled (set ADMIN_PASSWORD).');
+  const n = admins.count();
+  console.log(n ? `Admin page at /admin (${n} admin account${n > 1 ? 's' : ''}).` : 'No admin account yet: run `node admins.js create <email>`.');
 });

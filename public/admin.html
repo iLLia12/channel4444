@@ -14,8 +14,11 @@
     <form class="card" id="login-form">
       <div class="brand">channel<span>4444</span> admin</div>
       <h1>Admin sign in</h1>
-      <label class="field">Admin password
-        <input type="password" id="admin-password" required autofocus>
+      <label class="field">Email
+        <input type="email" id="admin-email" required autofocus autocomplete="username">
+      </label>
+      <label class="field">Password
+        <input type="password" id="admin-password" required autocomplete="current-password">
       </label>
       <p class="error" id="login-error"></p>
       <div class="actions"><button class="btn primary" type="submit">Sign in</button></div>
@@ -26,8 +29,10 @@
   <div class="admin-login hidden" id="disabled-view">
     <div class="card">
       <div class="brand">channel<span>4444</span> admin</div>
-      <h1>Admin is disabled</h1>
-      <p class="hint">Start the server with the <code>ADMIN_PASSWORD</code> environment variable to turn on the admin page.</p>
+      <h1>No admin account yet</h1>
+      <p class="hint">On the server, run <code>setup.sh</code> with <code>ADMIN_EMAIL</code> set, or
+        <code>channel4444-admin create you@example.com</code>. Locally: <code>node admins.js create you@example.com</code>.
+        The generated password is printed once.</p>
     </div>
   </div>
 
@@ -50,6 +55,7 @@
         <div class="editor-actions">
           <input type="text" id="users-search" placeholder="Search by name, email or ID" autocomplete="off">
           <button class="btn small" id="refresh">Refresh</button>
+          <span class="admin-who" id="admin-who"></span>
           <button class="btn ghost small" id="logout">Sign out</button>
         </div>
       </header>

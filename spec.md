@@ -60,7 +60,13 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - No accounts or passwords per user: the identity is stored in the browser.
 
 ## 4. Admin page (`/admin`)
-- Protected by its own password (`ADMIN_PASSWORD`); turned off if that isn't set.
+- Signed in with an admin account: email + password. Admin accounts are separate from chat users.
+  - `setup.sh` creates the first admin from `ADMIN_EMAIL` (required on the first run) and prints
+    its generated password once. Only a scrypt hash is stored (`data/admins.json`).
+  - More admins, password resets and removal: `channel4444-admin create|reset-password|delete|list`.
+  - Sessions are signed cookies valid for 12 hours. A password reset signs that admin out everywhere.
+  - Without any admin account, `/admin` shows how to create one.
+  - The header shows the signed-in admin's email.
 - VS Code-style layout: a narrow activity bar on the left with icon buttons, and content on the right.
 - Activity bar buttons (one for now):
   - **Users**: a list of all registered users with avatar, name, email (temporary ones are greyed

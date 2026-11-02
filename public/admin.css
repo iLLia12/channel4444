@@ -128,3 +128,5 @@
 .email-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .email-cell.temporary .email-text { color: var(--muted); }
 .email-wrap .badge { flex-shrink: 0; }
+
+.admin-who { color: var(--muted); font-size: 12px; }

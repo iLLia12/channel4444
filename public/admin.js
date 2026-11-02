@@ -11,6 +11,7 @@ async function init() {
   const session = await (await fetch('/api/admin/session')).json();
   if (!session.enabled) return show('disabled-view');
   if (!session.loggedIn) return show('login-view');
+  $('admin-who').textContent = session.email;
   show('app-view');
   loadUsers();
 }
@@ -21,7 +22,7 @@ $('login-form').addEventListener('submit', async (e) => {
   const res = await fetch('/api/admin/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: $('admin-password').value }),
+    body: JSON.stringify({ email: $('admin-email').value, password: $('admin-password').value }),
   });
   if (res.ok) {
     $('admin-password').value = '';

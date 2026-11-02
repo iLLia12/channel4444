@@ -6,14 +6,17 @@
 # in .env are kept.
 #
 # Usage (as root, on the server):
-#   DOMAIN=chat.example.com REPO=https://github.com/you/channel4444.git bash setup.sh
+#   DOMAIN=chat.example.com ADMIN_EMAIL=you@example.com REPO=https://github.com/you/channel4444.git bash setup.sh
+#
+# ADMIN_EMAIL is required until an admin account exists. The admin's password is generated
+# and printed once at the end; only a hash is stored. Re-running keeps existing admins.
 #
 # Optional variables:
 #   APP_DIR        where the app lives          (default /opt/channel4444)
 #   BRANCH         git branch to deploy          (default: repo default)
 #   DATA_DIR       data path INSIDE container    (default /app/data)  <- check your app
 #   ACCESS_PASSWORD shared app password          (default: generated)
-#   ADMIN_PASSWORD password for /admin           (default: generated)
+#   ADMIN_EMAIL    email of the admin account to create (required on first run)
 #   SSH_PORT       your SSH port                 (default 22)
 #   REDIRECT_DOMAINS extra names that redirect to DOMAIN, space-separated
 #                  e.g. "channel4444.party www.channel4444.party"
@@ -29,6 +32,7 @@ APP_DIR="${APP_DIR:-/opt/channel4444}"
 DATA_DIR="${DATA_DIR:-/app/data}"
 SSH_PORT="${SSH_PORT:-22}"
 REDIRECT_DOMAINS="${REDIRECT_DOMAINS:-}"
+ADMIN_EMAIL="$(echo "${ADMIN_EMAIL:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
 APP_PORT=4444
 
 log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
@@ -39,6 +43,9 @@ die()  { printf '\033[1;31mxx %s\033[0m\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "Run as root (sudo -E bash setup.sh)."
 [[ -n "$DOMAIN" ]] || die "Set DOMAIN, e.g. DOMAIN=chat.example.com"
 command -v apt-get >/dev/null || die "This script supports Ubuntu/Debian only."
+if [[ -n "$ADMIN_EMAIL" && ! "$ADMIN_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+  die "ADMIN_EMAIL '$ADMIN_EMAIL' doesn't look like an email address."
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -107,6 +114,11 @@ mkdir -p data deploy
 # The app runs as the "node" user (uid 1000) inside the container.
 chown -R 1000:1000 data
 
+# The first run must create an admin; later runs may skip ADMIN_EMAIL.
+if [[ -z "$ADMIN_EMAIL" ]] && ! grep -q '"email"' data/admins.json 2>/dev/null; then
+  die "No admin account yet. Run again with ADMIN_EMAIL=you@example.com"
+fi
+
 # ---------------------------------------------------------------- secrets
 if [[ ! -f .env.prod ]]; then
   log "Generating secrets (.env.prod)"
@@ -120,10 +132,10 @@ EOF
 else
   log "Keeping existing .env.prod"
 fi
-# Added after the first release: give older installs an admin password too.
-if ! grep -q '^ADMIN_PASSWORD=' .env.prod; then
-  log "Adding ADMIN_PASSWORD to .env.prod"
-  echo "ADMIN_PASSWORD=${ADMIN_PASSWORD:-$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)}" >> .env.prod
+# Older installs had a shared ADMIN_PASSWORD; admins are accounts now (data/admins.json).
+if grep -q '^ADMIN_PASSWORD=' .env.prod; then
+  log "Removing the old shared ADMIN_PASSWORD from .env.prod (replaced by admin accounts)"
+  sed -i '/^ADMIN_PASSWORD=/d' .env.prod
 fi
 # shellcheck disable=SC1091
 set -a; source .env.prod; set +a
@@ -180,7 +192,6 @@ services:
     environment:
       PORT: "${APP_PORT}"
       ACCESS_PASSWORD: \${ACCESS_PASSWORD}
-      ADMIN_PASSWORD: \${ADMIN_PASSWORD}
       # The IP, not the domain: a Cloudflare-proxied domain doesn't forward TURN traffic.
       TURN_URL: "turn:${PUBLIC_IP}:3478?transport=udp,turn:${PUBLIC_IP}:3478?transport=tcp"
       TURN_USERNAME: \${TURN_USERNAME}
@@ -260,7 +271,12 @@ else
   echo "Access password changed. Everyone has to enter the new one."
 fi
 EOF
-chmod +x /usr/local/bin/channel4444 /usr/local/bin/channel4444-update /usr/local/bin/channel4444-password
+# channel4444-admin create|reset-password|delete <email>, channel4444-admin list
+cat > /usr/local/bin/channel4444-admin <<EOF
+#!/usr/bin/env bash
+cd ${APP_DIR} && exec docker compose -f compose.prod.yml --env-file .env.prod exec -T app node admins.js "\$@"
+EOF
+chmod +x /usr/local/bin/channel4444 /usr/local/bin/channel4444-update /usr/local/bin/channel4444-password /usr/local/bin/channel4444-admin
 
 # ---------------------------------------------------------------- health check
 log "Waiting for the app to start"
@@ -277,6 +293,25 @@ if [[ $APP_OK -eq 0 ]]; then
   docker compose -f compose.prod.yml --env-file .env.prod logs app --tail 30 || true
 fi
 
+# ---------------------------------------------------------------- admin account
+ADMIN_LINES=""
+if [[ -n "$ADMIN_EMAIL" ]]; then
+  log "Creating admin account ${ADMIN_EMAIL}"
+  set +e
+  ADMIN_NEW_PASSWORD="$(docker compose -f compose.prod.yml --env-file .env.prod exec -T app node admins.js create "$ADMIN_EMAIL" 2>/tmp/channel4444-admin.err)"
+  ADMIN_RC=$?
+  set -e
+  case $ADMIN_RC in
+    0) ADMIN_LINES=" Admin email:      ${ADMIN_EMAIL}
+ Admin password:   ${ADMIN_NEW_PASSWORD}
+                   ^ shown only this once. Save it in a password manager now." ;;
+    3) ADMIN_LINES=" Admin email:      ${ADMIN_EMAIL} (already existed, password unchanged)
+                   Forgot it? channel4444-admin reset-password ${ADMIN_EMAIL}" ;;
+    *) die "Could not create the admin account: $(cat /tmp/channel4444-admin.err)" ;;
+  esac
+  rm -f /tmp/channel4444-admin.err
+fi
+
 # ---------------------------------------------------------------- done
 cat <<EOF
 
@@ -285,7 +320,8 @@ cat <<EOF
  (first HTTPS request may take ~30s while the certificate is issued)
 
  Access password:  ${ACCESS_PASSWORD}
- Admin page:       https://${DOMAIN}/admin   (password: ${ADMIN_PASSWORD})
+ Admin page:       https://${DOMAIN}/admin
+${ADMIN_LINES}
  Secrets file:     ${APP_DIR}/.env.prod
  Data:             ${APP_DIR}/data   (backups in /var/backups/channel4444)
 
@@ -293,6 +329,9 @@ cat <<EOF
    channel4444-update            pull latest code and rebuild
    channel4444-password          show the access password
    channel4444-password NEWPASS  change it
+   channel4444-admin reset-password EMAIL   new admin password (printed once)
+   channel4444-admin create EMAIL           add another admin
+   channel4444-admin list                   list admins
    channel4444 logs -f           follow logs
    channel4444 ps                container status
    channel4444 restart           restart everything
