@@ -27,6 +27,12 @@
       <input type="text" name="name" id="name-input" maxlength="32" required autocomplete="off">
     </label>
 
+    <label class="field">Email
+      <input type="email" name="email" id="email-input" maxlength="254" required autocomplete="email" placeholder="you@example.com">
+    </label>
+    <p class="hint">Only you and the admin can see your email.</p>
+    <p class="notice hidden" id="email-notice">Please add your real email address. You currently have a temporary one.</p>
+
     <p class="error" id="form-error"></p>
     <div class="actions">
       <a href="/" class="btn ghost hidden" id="cancel">Cancel</a>

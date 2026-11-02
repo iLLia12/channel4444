@@ -48,7 +48,7 @@
       <header class="editor-header">
         <div class="tab">Users <span class="count" id="users-count">0</span></div>
         <div class="editor-actions">
-          <input type="text" id="users-search" placeholder="Search by name or ID" autocomplete="off">
+          <input type="text" id="users-search" placeholder="Search by name, email or ID" autocomplete="off">
           <button class="btn small" id="refresh">Refresh</button>
           <button class="btn ghost small" id="logout">Sign out</button>
         </div>
@@ -59,6 +59,7 @@
           <thead>
             <tr id="users-head">
               <th data-sort="name">User</th>
+              <th data-sort="email">Email</th>
               <th data-sort="id">ID</th>
               <th data-sort="createdAt">Registered</th>
               <th data-sort="status">Status</th>

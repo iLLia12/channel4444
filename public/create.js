@@ -1,5 +1,7 @@
 const form = document.getElementById('profile-form');
 const nameInput = document.getElementById('name-input');
+const emailInput = document.getElementById('email-input');
+const emailNotice = document.getElementById('email-notice');
 const avatarInput = document.getElementById('avatar-input');
 const preview = document.getElementById('avatar-preview');
 const removeBtn = document.getElementById('remove-avatar');
@@ -28,9 +30,26 @@ if (existing) {
   submitBtn.textContent = 'Save';
   document.getElementById('cancel').classList.remove('hidden');
   nameInput.value = existing.name;
+  fillEmail(existing);
+  // The stored copy may predate emails; ask the server for the current profile.
+  fetch('/api/users/me', { headers: { 'X-User-Id': existing.id, 'X-User-Token': existing.token } })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((profile) => {
+      if (!profile) return;
+      Store.user = { ...existing, ...profile };
+      if (!emailInput.value || existing.emailTemporary !== profile.emailTemporary) fillEmail(profile);
+    })
+    .catch(() => {});
 }
 renderPreview();
 nameInput.focus();
+
+// A temporary placeholder isn't shown; the user is asked to enter a real address instead.
+function fillEmail(profile) {
+  const temporary = !!profile.emailTemporary;
+  if (!temporary && profile.email) emailInput.value = profile.email;
+  emailNotice.classList.toggle('hidden', !temporary);
+}
 
 nameInput.addEventListener('input', renderPreview);
 avatarInput.addEventListener('change', () => {
@@ -58,8 +77,15 @@ form.addEventListener('submit', async (e) => {
     errorEl.textContent = 'Please enter a user name';
     return;
   }
+  const email = emailInput.value.trim();
+  if (!email) {
+    errorEl.textContent = 'Please enter your email';
+    emailInput.focus();
+    return;
+  }
   const data = new FormData();
   data.append('name', name);
+  data.append('email', email);
   if (avatarInput.files[0]) data.append('avatar', avatarInput.files[0]);
   if (removeAvatar) data.append('removeAvatar', '1');
 
@@ -81,7 +107,10 @@ form.addEventListener('submit', async (e) => {
       location.replace('/suspended.html');
       return;
     }
-    if (!res.ok) throw new Error(body.error || 'Something went wrong');
+    if (!res.ok) {
+      if (body.field === 'email') emailInput.focus();
+      throw new Error(body.error || 'Something went wrong');
+    }
     Store.user = body;
     location.href = '/';
   } catch (err) {

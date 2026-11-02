@@ -122,3 +122,9 @@
 }
 /* Line numbers up with the header text, which reserves room for the sort arrow. */
 .users-table td.num { padding-right: calc(12px + 1em + 4px); }
+
+.email-cell { max-width: 280px; }
+.email-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.email-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.email-cell.temporary .email-text { color: var(--muted); }
+.email-wrap .badge { flex-shrink: 0; }

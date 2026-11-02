@@ -62,7 +62,8 @@ socket.on('init', (data) => {
 socket.on('users', (users) => {
   state.users = users;
   const mine = users[me.id];
-  if (mine) Store.user = { ...mine, token: me.token };
+  // The directory is public (no email), so keep our private fields.
+  if (mine) Store.user = { ...Store.user, ...mine, token: me.token };
   renderMe();
   renderLists();
   refreshMessageAuthors();

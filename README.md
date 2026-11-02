@@ -25,7 +25,7 @@ echo "ADMIN_PASSWORD=your-strong-password" > .env
 ```
 
 Open `http://localhost:4444`. On first visit you are sent to the **Create user** page
-(name + avatar). Your identity is stored in the browser's localStorage.
+(name, email and avatar; the email is required, must be unique, and only you and the admin see it). Your identity is stored in the browser's localStorage.
 
 ## Main page
 
@@ -52,8 +52,11 @@ The admin page is turned off when `ADMIN_PASSWORD` isn't set.
 
 The layout copies VS Code: a narrow activity bar on the left, with one button for now:
 
-- **Users**: every registered user with their avatar, name, ID, registration date,
-  status (online, in video chat, suspended, or offline) and number of chat messages. You can search by name or ID.
+- **Users**: every registered user with their avatar, name, email, ID, registration date,
+  status (online, in video chat, suspended, or offline) and number of chat messages. You can search by
+  name, email or ID.
+  - Users created before emails were required have a temporary `user-<id>@temp.invalid` address,
+    marked "temporary". The app asks them for a real one when they open **Edit profile**.
   - **Sort** by any column: click its header, then click again to reverse. Your choice is remembered.
   - Each row has two icon buttons: **⏸ suspend** (▶ to unsuspend) and **🗑 delete**.
   - **Suspend**: disconnects the user right away. They see an "account suspended" page until you

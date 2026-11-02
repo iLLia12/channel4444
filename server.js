@@ -32,7 +32,7 @@ function loadJson(file, fallback) {
   }
 }
 
-const users = loadJson(USERS_FILE, {}); // id -> { id, name, avatar, token, createdAt }
+const users = loadJson(USERS_FILE, {}); // id -> { id, name, email, emailTemporary, avatar, token, createdAt }
 let messages = loadJson(MESSAGES_FILE, []);
 
 const saveTimers = {};
@@ -47,8 +47,44 @@ function scheduleSave(file, getData) {
 const saveUsers = () => scheduleSave(USERS_FILE, () => users);
 const saveMessages = () => scheduleSave(MESSAGES_FILE, () => messages);
 
+// Users created before emails were required get a placeholder. ".invalid" is a reserved
+// domain, so these can never be real addresses; they're flagged until the user sets one.
+let migrated = 0;
+for (const u of Object.values(users)) {
+  if (!u.email) {
+    u.email = `user-${u.id}@temp.invalid`;
+    u.emailTemporary = true;
+    migrated++;
+  }
+}
+if (migrated) {
+  console.log(`Gave ${migrated} existing user(s) a temporary email.`);
+  saveUsers();
+}
+
+// Sent to everyone (user lists, chat). Never includes the email.
 function publicUser(u) {
   return { id: u.id, name: u.name, avatar: u.avatar };
+}
+
+// Only for the user themselves and the admin.
+function privateUser(u) {
+  return { ...publicUser(u), email: u.email, emailTemporary: !!u.emailTemporary };
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function cleanEmail(email) {
+  return String(email || '').trim().slice(0, 254);
+}
+
+// Returns an error message, or null if the email is valid and not used by anyone else.
+function emailProblem(email, exceptUserId) {
+  if (!email) return 'Email is required';
+  if (!EMAIL_RE.test(email)) return 'Please enter a valid email address';
+  const lower = email.toLowerCase();
+  const taken = Object.values(users).some((u) => u.id !== exceptUserId && u.email && u.email.toLowerCase() === lower);
+  return taken ? 'This email is already used by another user' : null;
 }
 
 function directory() {
@@ -216,7 +252,7 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   const inVideo = new Set(videoParticipants.values());
   const list = Object.values(users)
     .map((u) => ({
-      ...publicUser(u),
+      ...privateUser(u),
       createdAt: u.createdAt,
       online: userSockets.has(u.id),
       inVideo: inVideo.has(u.id),
@@ -301,9 +337,16 @@ app.post('/api/users', runUpload(avatarUpload), (req, res) => {
     removeUpload(req.file);
     return res.status(400).json({ error: 'Name is required' });
   }
+  const email = cleanEmail(req.body.email);
+  const problem = emailProblem(email);
+  if (problem) {
+    removeUpload(req.file);
+    return res.status(problem.includes('already') ? 409 : 400).json({ error: problem, field: 'email' });
+  }
   const user = {
     id: crypto.randomBytes(8).toString('hex'),
     name,
+    email,
     avatar: req.file ? '/uploads/' + req.file.filename : null,
     token: crypto.randomBytes(24).toString('hex'),
     createdAt: Date.now(),
@@ -311,7 +354,14 @@ app.post('/api/users', runUpload(avatarUpload), (req, res) => {
   users[user.id] = user;
   saveUsers();
   broadcastDirectory();
-  res.json({ ...publicUser(user), token: user.token });
+  res.json({ ...privateUser(user), token: user.token });
+});
+
+// Own profile, including the private email (for the edit page).
+app.get('/api/users/me', (req, res) => {
+  const user = authUser(req.get('x-user-id'), req.get('x-user-token'));
+  if (!user) return res.status(401).json({ error: 'Unknown user' });
+  res.json(privateUser(user));
 });
 
 // Update own profile.
@@ -330,7 +380,17 @@ app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
     removeUpload(req.file);
     return res.status(400).json({ error: 'Name is required' });
   }
+  const email = cleanEmail(req.body.email);
+  const problem = emailProblem(email, user.id);
+  if (problem) {
+    removeUpload(req.file);
+    return res.status(problem.includes('already') ? 409 : 400).json({ error: problem, field: 'email' });
+  }
   user.name = name;
+  if (email !== user.email) {
+    user.email = email;
+    user.emailTemporary = false;
+  }
   if (req.file) {
     removeUploadedFile(user.avatar);
     user.avatar = '/uploads/' + req.file.filename;
@@ -340,7 +400,7 @@ app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
   }
   saveUsers();
   broadcastDirectory();
-  res.json({ ...publicUser(user), token: user.token });
+  res.json({ ...privateUser(user), token: user.token });
 });
 
 // Post a photo to the chat (optionally with a caption).
@@ -490,7 +550,7 @@ io.on('connection', (socket) => {
   userSockets.get(userId).add(socket.id);
 
   socket.emit('init', {
-    me: publicUser(users[userId]),
+    me: privateUser(users[userId]),
     users: directory(),
     online: onlineUserIds(),
     video: videoList(),

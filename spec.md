@@ -48,6 +48,13 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 
 ## 3. Create user page
 - Input for user name (required, up to 32 characters).
+- Input for email (required, must be a valid address, unique across all users — case-insensitive).
+  - Private: only the user (on their profile page) and the admin can see it; it is never sent to
+    other users.
+  - Not verified (no confirmation email).
+  - Users created before emails were required got a temporary placeholder
+    `user-<id>@temp.invalid` (`.invalid` can never be a real domain). When they open
+    "Edit profile", the email field is empty with a notice asking for their real address.
 - Upload avatar (optional, up to 5 MB; initials are shown if there's no avatar).
 - The same page is used to edit your profile later ("Edit profile" on the main page).
 - No accounts or passwords per user: the identity is stored in the browser.
@@ -56,9 +63,11 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - Protected by its own password (`ADMIN_PASSWORD`); turned off if that isn't set.
 - VS Code-style layout: a narrow activity bar on the left with icon buttons, and content on the right.
 - Activity bar buttons (one for now):
-  - **Users**: a list of all registered users with avatar, name, ID, registration date,
-    status (online / in video chat / suspended / offline) and message count; searchable by name or ID.
-  - Click any column header (User, ID, Registered, Status, Messages) to sort; click again to reverse.
+  - **Users**: a list of all registered users with avatar, name, email (temporary ones are greyed
+    out with a "temporary" badge), ID, registration date,
+    status (online / in video chat / suspended / offline) and message count; searchable by name,
+    email or ID.
+  - Click any column header (User, Email, ID, Registered, Status, Messages) to sort; click again to reverse.
     An arrow shows the current sort, and it is remembered in the browser. Status sorts by activity:
     in video chat → online → offline → suspended.
   - Row actions are icon buttons (with tooltips): pause = suspend, play = unsuspend, trash = delete.

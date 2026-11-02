@@ -73,12 +73,14 @@ const statusRank = (u) => (u.suspended ? 0 : u.inVideo ? 3 : u.online ? 2 : 1);
 const SORTERS = {
   name: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
   id: (a, b) => a.id.localeCompare(b.id),
+  // Temporary placeholder emails sort after real ones.
+  email: (a, b) => (a.emailTemporary - b.emailTemporary) || (a.email || '').localeCompare(b.email || '', undefined, { sensitivity: 'base' }),
   createdAt: (a, b) => (a.createdAt || 0) - (b.createdAt || 0),
   status: (a, b) => statusRank(a) - statusRank(b),
   messages: (a, b) => a.messages - b.messages,
 };
 // First click on text columns sorts A→Z; on numbers, dates and status, biggest/newest/most active first.
-const FIRST_DIR = { name: 'asc', id: 'asc', createdAt: 'desc', status: 'desc', messages: 'desc' };
+const FIRST_DIR = { name: 'asc', email: 'asc', id: 'asc', createdAt: 'desc', status: 'desc', messages: 'desc' };
 
 function sortedUsers(list) {
   const cmp = SORTERS[sort.field] || SORTERS.createdAt;
@@ -119,7 +121,7 @@ for (const th of document.querySelectorAll('#users-head th[data-sort]')) {
 function renderUsers() {
   const q = $('users-search').value.trim().toLowerCase();
   const filtered = q
-    ? allUsers.filter((u) => u.name.toLowerCase().includes(q) || u.id.includes(q))
+    ? allUsers.filter((u) => u.name.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || u.id.includes(q))
     : allUsers;
   const list = sortedUsers(filtered);
   renderSortHeaders();
@@ -129,6 +131,16 @@ function renderUsers() {
         'tr',
         null,
         el('td', null, el('div', { class: 'user-cell' }, avatarEl(u, 'sm'), el('span', { text: u.name }))),
+        el(
+          'td',
+          { class: 'email-cell' + (u.emailTemporary ? ' temporary' : '') },
+          el(
+            'div',
+            { class: 'email-wrap' },
+            el('span', { class: 'email-text', text: u.email || '—', title: u.email || '' }),
+            u.emailTemporary ? el('span', { class: 'badge', text: 'temporary', title: 'Placeholder until the user sets a real email' }) : null
+          )
+        ),
         el('td', { class: 'mono', text: u.id }),
         el('td', { text: u.createdAt ? dateFmt.format(new Date(u.createdAt)) : '—' }),
         el('td', null, statusBadge(u)),

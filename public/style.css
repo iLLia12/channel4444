@@ -337,7 +337,7 @@ h2 {
 .send-btn:disabled:hover { background: transparent; }
 .chat-panel .error { padding: 0 16px; }
 
-input[type="text"], input[type="password"] {
+input[type="text"], input[type="password"], input[type="email"] {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -346,7 +346,7 @@ input[type="text"], input[type="password"] {
   font: inherit;
   outline: none;
 }
-input[type="text"]:focus, input[type="password"]:focus { border-color: var(--accent); }
+input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus { border-color: var(--accent); }
 
 /* ---------- standalone pages ---------- */
 
@@ -360,6 +360,16 @@ body.centered { align-items: center; justify-content: center; padding: 20px; }
   padding: 24px;
 }
 .field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
+.field + .field { margin-top: 14px; }
+.notice {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(245, 166, 35, .12);
+  border: 1px solid rgba(245, 166, 35, .4);
+  color: #f5c46b;
+}
 .field input { color: var(--text); font-size: 14px; }
 .avatar-picker { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
