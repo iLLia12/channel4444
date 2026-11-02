@@ -54,14 +54,9 @@ socket.on('init', (data) => {
   Store.user = { ...data.me, token: me.token };
   renderMe();
   renderLists();
-  // (Re)connected: start from the newest page again.
-  chatHistory.hasMore = data.hasMore;
-  chatHistory.loading = false;
-  $('messages').replaceChildren(historyMarker());
+  $('messages').replaceChildren();
   data.messages.forEach((m) => appendMessage(m));
-  updateHistoryMarker();
   scrollChat(true);
-  fillChat();
 });
 
 socket.on('users', (users) => {
@@ -160,12 +155,11 @@ function linkify(text) {
   return frag;
 }
 
-// Photos have a placeholder size until they load (an unloaded <img> is 0px tall, which made
-// pages of photos look empty). Then adjust the scroll for the real size.
-function photoSettled(img, node, older) {
+// Photos have a placeholder size until they load (an unloaded <img> is 0px tall), then keep
+// the chat pinned to the bottom if it was there.
+function photoSettled(img) {
   img.classList.remove('pending');
-  if (older) keepAnchored(node);
-  else scrollChat();
+  scrollChat();
 }
 
 // Download icon, styled like the edit/delete icons. The file name isn't shown, but downloads keep it.
@@ -176,7 +170,7 @@ function downloadLink(image) {
   return a;
 }
 
-function renderMessage(m, older) {
+function renderMessage(m) {
   const u = userById(m.userId);
   const mine = m.userId === me.id;
   const body = el('div', { class: 'msg-body' });
@@ -192,8 +186,8 @@ function renderMessage(m, older) {
             src: m.image.url,
             alt: 'Photo',
             class: 'pending',
-            onload: (e) => photoSettled(e.target, node, older),
-            onerror: (e) => photoSettled(e.target, node, older),
+            onload: (e) => photoSettled(e.target),
+            onerror: (e) => photoSettled(e.target),
           })
         )
       )
@@ -203,7 +197,7 @@ function renderMessage(m, older) {
 
   const node = el(
     'div',
-    { class: 'msg' + (mine ? ' mine' : ''), 'data-user': m.userId, 'data-id': m.id, 'data-ts': m.ts },
+    { class: 'msg' + (mine ? ' mine' : ''), 'data-user': m.userId, 'data-id': m.id },
     el('div', { class: 'msg-avatar' }, avatarEl(u, 'sm')),
     el(
       'div',
@@ -300,84 +294,6 @@ function refreshMessageAuthors() {
   }
 }
 
-// ---------- lazy-loaded history ----------
-
-const chatHistory = { hasMore: false, loading: false };
-
-function historyMarker() {
-  return el('div', { class: 'history-marker', id: 'history-marker' });
-}
-
-function updateHistoryMarker() {
-  const marker = $('history-marker');
-  if (!marker) return;
-  const empty = !$('messages').querySelector('.msg');
-  marker.textContent = chatHistory.loading
-    ? 'Loading earlier messages…'
-    : chatHistory.hasMore
-      ? ''
-      : empty
-        ? 'No messages yet. Say hi!'
-        : 'This is the start of the chat';
-}
-
-function oldestMessage() {
-  return $('messages').querySelector('.msg');
-}
-
-function loadOlder(reason, after) {
-  if (!chatHistory.hasMore || chatHistory.loading) return;
-  const oldest = oldestMessage();
-  if (!oldest) return;
-  chatHistory.loading = true;
-  updateHistoryMarker();
-  socket.emit('chat:history', { before: oldest.dataset.id, beforeTs: Number(oldest.dataset.ts) }, (res) => {
-    chatHistory.loading = false;
-    chatHistory.hasMore = !!res.hasMore;
-    const box = $('messages');
-    // Keep what you're looking at in place while older messages are added above it.
-    const fromBottom = box.scrollHeight - box.scrollTop;
-    const nodes = res.messages
-      .filter((m) => !box.querySelector(`.msg[data-id="${m.id}"]`))
-      .map((m) => renderMessage(m, true));
-    $('history-marker').after(...nodes);
-    updateHistoryMarker();
-    for (const n of nodes) n.knownHeight = n.offsetHeight;
-    box.scrollTop = box.scrollHeight - fromBottom;
-    console.log(`[chat] loaded ${nodes.length} older messages (${reason}); now ${box.querySelectorAll('.msg').length}, more: ${chatHistory.hasMore}`);
-    if (after) after();
-  });
-}
-
-// If the loaded messages don't fill the panel there's no scrollbar to pull, so load a bit more.
-// Capped, so a layout problem can never make it pull the whole history.
-const MAX_AUTO_PAGES = 3;
-function fillChat(pages = 0) {
-  const box = $('messages');
-  if (pages >= MAX_AUTO_PAGES || !chatHistory.hasMore) return;
-  if (box.scrollHeight <= box.clientHeight + 100) loadOlder('fill screen', () => fillChat(pages + 1));
-}
-
-// Only the user's own upward scrolling loads more. Our scroll adjustments after inserting
-// messages (and photos finishing loading) move the view down, so they can't trigger a load.
-let lastScrollTop = 0;
-$('messages').addEventListener('scroll', () => {
-  const top = $('messages').scrollTop;
-  const scrollingUp = top < lastScrollTop;
-  lastScrollTop = top;
-  if (scrollingUp && top < 150) loadOlder('scrolled up');
-});
-
-// Older photos load after they're inserted above the viewport; grow the scroll by the
-// same amount so the messages you're reading don't jump down. `node.knownHeight` is
-// recorded right after insertion (an image can finish loading before the next frame).
-function keepAnchored(node) {
-  const box = $('messages');
-  const delta = node.offsetHeight - (node.knownHeight || 0);
-  node.knownHeight = node.offsetHeight;
-  if (delta && node.getBoundingClientRect().top < box.getBoundingClientRect().top) box.scrollTop += delta;
-}
-
 function isNearBottom() {
   const box = $('messages');
   return box.scrollHeight - box.scrollTop - box.clientHeight < 120;
@@ -391,7 +307,6 @@ function scrollChat(force) {
 socket.on('chat:message', (m) => {
   const stick = isNearBottom() || m.userId === me.id;
   appendMessage(m);
-  updateHistoryMarker();
   if (stick) scrollChat(true);
 });
 
@@ -403,7 +318,6 @@ socket.on('chat:updated', (m) => {
 socket.on('chat:deleted', ({ id }) => {
   const node = $('messages').querySelector(`.msg[data-id="${id}"]`);
   if (node) node.remove();
-  updateHistoryMarker();
 });
 
 $('composer').addEventListener('submit', (e) => {

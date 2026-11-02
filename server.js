@@ -17,7 +17,6 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const MAX_MESSAGES = 500;
-const PAGE_SIZE = 20; // messages sent on page load and per "load older" request
 const MAX_TEXT = 4000;
 const MAX_NAME = 32;
 
@@ -490,23 +489,9 @@ io.on('connection', (socket) => {
     users: directory(),
     online: onlineUserIds(),
     video: videoList(),
-    messages: messages.slice(-PAGE_SIZE),
-    hasMore: messages.length > PAGE_SIZE,
+    messages,
   });
   broadcastPresence();
-
-  // Older messages for lazy loading: the PAGE_SIZE messages right before `before` (a message id).
-  // `beforeTs` is the fallback when that message was deleted meanwhile.
-  socket.on('chat:history', (payload, ack) => {
-    if (typeof ack !== 'function') return;
-    const id = payload && typeof payload.before === 'string' ? payload.before : '';
-    const ts = payload && Number(payload.beforeTs);
-    let end = messages.findIndex((m) => m.id === id);
-    if (end === -1) end = Number.isFinite(ts) ? messages.findIndex((m) => m.ts >= ts) : -1;
-    if (end === -1) end = messages.length;
-    const start = Math.max(0, end - PAGE_SIZE);
-    ack({ messages: messages.slice(start, end), hasMore: start > 0 });
-  });
 
   socket.on('chat:send', (payload) => {
     const text = String((payload && payload.text) || '').trim();

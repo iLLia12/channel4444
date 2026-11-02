@@ -36,8 +36,7 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
   own tile shows your mic level. A red notice appears if others can't hear or see you.
   Other people's tiles show a blue bar for the audio arriving from them, and "No audio received"
   if none is.
-- **Chat**: opens with the newest 20 messages; scroll up to load earlier ones, 20 at a time.
-  Text messages, plus photos (📷 button). Anything typed in the box is sent
+- **Chat**: shows the last 500 messages. Text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or hover over the message and click
   the ⬇ download icon (next to edit/delete). File names aren't shown in the chat, but downloads keep the original name.
   Hover over your own message and click the **✏️ pencil** to edit it (Enter saves, Esc cancels)
@@ -139,12 +138,3 @@ The TURN relay is reached by the server's IP address, not the domain, because a 
      (system sound settings). On iPhone, sound may come out of the quiet earpiece; using headphones fixes it.
 6. **Testing in the same home:** mute one laptop's speakers or use headphones. Otherwise you may be
    hearing each other through the air, not through the app.
-
-## Troubleshooting: chat history
-
-- The chat opens with the newest 20 messages. Each time older messages load, the browser console
-  logs a line like `[chat] loaded 20 older messages (scrolled up); now 40, more: true`.
-  The reason is either `scrolled up` (you scrolled) or `fill screen` (the panel wasn't full,
-  at most 3 times on open).
-- "This is the start of the chat" at the top means everything has been loaded. The server keeps
-  the last 500 messages.
