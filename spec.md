@@ -21,7 +21,9 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
     the 20 before them, and so on. The messages you're reading stay in place while older ones are
     added above, including photos that finish loading later. "Loading earlier messages…" shows
     while loading, and "This is the start of the chat" when there's nothing older. If 20 messages
-    don't fill the panel (tall screen), more load automatically.
+    don't fill the panel (tall screen), up to 3 more pages load automatically, never more.
+    Only scrolling up yourself loads older messages, not the app's own scroll adjustments.
+    Photos show a grey placeholder until they load, so a page of photos takes its real space.
   - Message icons appear on hover (always visible on touch screens), in this order:
     ⬇ download (photos, anyone), ✏️ edit and 🗑 delete (your own messages only). Nobody can edit or delete someone else's messages.
     - Editing happens in place: Enter saves, Esc cancels. Edited messages show "(edited)".

@@ -160,6 +160,14 @@ function linkify(text) {
   return frag;
 }
 
+// Photos have a placeholder size until they load (an unloaded <img> is 0px tall, which made
+// pages of photos look empty). Then adjust the scroll for the real size.
+function photoSettled(img, node, older) {
+  img.classList.remove('pending');
+  if (older) keepAnchored(node);
+  else scrollChat();
+}
+
 // Download icon, styled like the edit/delete icons. The file name isn't shown, but downloads keep it.
 function downloadLink(image) {
   const label = `Download photo${image.size ? ' (' + formatSize(image.size) + ')' : ''}`;
@@ -183,7 +191,9 @@ function renderMessage(m, older) {
           el('img', {
             src: m.image.url,
             alt: 'Photo',
-            onload: older ? () => keepAnchored(node) : () => scrollChat(),
+            class: 'pending',
+            onload: (e) => photoSettled(e.target, node, older),
+            onerror: (e) => photoSettled(e.target, node, older),
           })
         )
       )
@@ -315,7 +325,7 @@ function oldestMessage() {
   return $('messages').querySelector('.msg');
 }
 
-function loadOlder() {
+function loadOlder(reason, after) {
   if (!chatHistory.hasMore || chatHistory.loading) return;
   const oldest = oldestMessage();
   if (!oldest) return;
@@ -334,18 +344,28 @@ function loadOlder() {
     updateHistoryMarker();
     for (const n of nodes) n.knownHeight = n.offsetHeight;
     box.scrollTop = box.scrollHeight - fromBottom;
-    fillChat();
+    console.log(`[chat] loaded ${nodes.length} older messages (${reason}); now ${box.querySelectorAll('.msg').length}, more: ${chatHistory.hasMore}`);
+    if (after) after();
   });
 }
 
-// If the loaded messages don't fill the panel there's no scrollbar to pull, so keep loading.
-function fillChat() {
+// If the loaded messages don't fill the panel there's no scrollbar to pull, so load a bit more.
+// Capped, so a layout problem can never make it pull the whole history.
+const MAX_AUTO_PAGES = 3;
+function fillChat(pages = 0) {
   const box = $('messages');
-  if (chatHistory.hasMore && box.scrollHeight <= box.clientHeight + 100) loadOlder();
+  if (pages >= MAX_AUTO_PAGES || !chatHistory.hasMore) return;
+  if (box.scrollHeight <= box.clientHeight + 100) loadOlder('fill screen', () => fillChat(pages + 1));
 }
 
+// Only the user's own upward scrolling loads more. Our scroll adjustments after inserting
+// messages (and photos finishing loading) move the view down, so they can't trigger a load.
+let lastScrollTop = 0;
 $('messages').addEventListener('scroll', () => {
-  if ($('messages').scrollTop < 150) loadOlder();
+  const top = $('messages').scrollTop;
+  const scrollingUp = top < lastScrollTop;
+  lastScrollTop = top;
+  if (scrollingUp && top < 150) loadOlder('scrolled up');
 });
 
 // Older photos load after they're inserted above the viewport; grow the scroll by the
@@ -384,7 +404,6 @@ socket.on('chat:deleted', ({ id }) => {
   const node = $('messages').querySelector(`.msg[data-id="${id}"]`);
   if (node) node.remove();
   updateHistoryMarker();
-  fillChat();
 });
 
 $('composer').addEventListener('submit', (e) => {

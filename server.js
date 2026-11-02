@@ -267,7 +267,9 @@ const PUBLIC_WHEN_LOCKED = new Set([
   '/admin.js',
   '/admin.css',
   '/common.js',
+  '/favicon.svg',
 ]);
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.use((req, res, next) => {
   const allowed = hasAccess(req.headers.cookie) || isAdmin(req.headers.cookie);
   if (allowed || PUBLIC_WHEN_LOCKED.has(req.path)) return next();

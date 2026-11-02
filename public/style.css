@@ -305,6 +305,7 @@ h2 {
   .msg .msg-actions { display: inline-flex; }
 }
 .msg-photo { margin: 4px 0; }
+.msg-photo img.pending { width: 240px; height: 180px; background: var(--panel-2); }
 .msg-photo img {
   display: block;
   max-width: 100%;
