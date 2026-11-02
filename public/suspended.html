@@ -13,7 +13,16 @@
     <h1>Your account is suspended</h1>
     <p class="hint">The admin has suspended your account, so you can't use the chat or video call right now.
       If you think this is a mistake, contact the admin.</p>
-    <div class="actions"><a href="/" class="btn">Try again</a></div>
+    <div class="actions">
+      <button class="btn ghost" id="logout">Sign out</button>
+      <a href="/" class="btn">Try again</a>
+    </div>
   </div>
+  <script>
+    document.getElementById('logout').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      location.replace('/login.html');
+    });
+  </script>
 </body>
 </html>

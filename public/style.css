@@ -372,6 +372,9 @@ body.centered { align-items: center; justify-content: center; padding: 20px; }
 }
 .field input { color: var(--text); font-size: 14px; }
 .avatar-picker { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
+.stack { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
+.card h2 { margin-bottom: 14px; }
+.error.success { color: var(--ok); }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 /* ---------- responsive ---------- */

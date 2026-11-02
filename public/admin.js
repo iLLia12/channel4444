@@ -1,40 +1,31 @@
 const $ = (id) => document.getElementById(id);
 let allUsers = [];
 
+let meId = null;
+
 function show(view) {
-  for (const id of ['login-view', 'disabled-view', 'app-view']) {
+  for (const id of ['not-admin-view', 'app-view']) {
     $(id).classList.toggle('hidden', id !== view);
   }
 }
 
+function toLogin() {
+  location.replace('/login.html?next=/admin');
+}
+
 async function init() {
-  const session = await (await fetch('/api/admin/session')).json();
-  if (!session.enabled) return show('disabled-view');
-  if (!session.loggedIn) return show('login-view');
-  $('admin-who').textContent = session.email;
+  const { user } = await (await fetch('/api/session')).json();
+  if (!user) return toLogin();
+  if (!user.isAdmin) return show('not-admin-view');
+  meId = user.id;
+  $('admin-who').textContent = user.email;
   show('app-view');
   loadUsers();
 }
 
-$('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  $('login-error').textContent = '';
-  const res = await fetch('/api/admin/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: $('admin-email').value, password: $('admin-password').value }),
-  });
-  if (res.ok) {
-    $('admin-password').value = '';
-    init();
-  } else {
-    $('login-error').textContent = (await res.json()).error || 'Sign in failed';
-  }
-});
-
 $('logout').addEventListener('click', async () => {
-  await fetch('/api/admin/logout', { method: 'POST' });
-  show('login-view');
+  await fetch('/api/logout', { method: 'POST' });
+  location.replace('/login.html');
 });
 
 // Activity bar: one view for now, but structured so more can be added.
@@ -47,7 +38,8 @@ for (const btn of document.querySelectorAll('.activity')) {
 
 async function loadUsers() {
   const res = await fetch('/api/admin/users');
-  if (res.status === 401) return show('login-view');
+  if (res.status === 401) return toLogin();
+  if (res.status === 403) return show('not-admin-view');
   allUsers = await res.json();
   renderUsers();
 }
@@ -131,7 +123,19 @@ function renderUsers() {
       el(
         'tr',
         null,
-        el('td', null, el('div', { class: 'user-cell' }, avatarEl(u, 'sm'), el('span', { text: u.name }))),
+        el(
+          'td',
+          null,
+          el(
+            'div',
+            { class: 'user-cell' },
+            avatarEl(u, 'sm'),
+            el('span', { text: u.name }),
+            u.id === meId ? el('span', { class: 'tag', text: 'you' }) : null,
+            u.isAdmin ? el('span', { class: 'badge admin', text: 'Admin' }) : null,
+            u.hasPassword ? null : el('span', { class: 'badge', text: 'No password', title: 'Reset the password to let them sign in' })
+          )
+        ),
         el(
           'td',
           { class: 'email-cell' + (u.emailTemporary ? ' temporary' : '') },
@@ -149,10 +153,14 @@ function renderUsers() {
         el(
           'td',
           { class: 'actions-col' },
-          u.suspended
-            ? iconButton('play', `Unsuspend ${u.name}`, 'ok', () => toggleSuspend(u))
-            : iconButton('pause', `Suspend ${u.name}`, 'warn', () => toggleSuspend(u)),
-          iconButton('trash', `Delete ${u.name}`, 'danger', () => openDelete(u))
+          // You can't lock yourself out; change your own password on the profile page.
+          u.id === meId ? null : iconButton('key', `Reset password for ${u.name}`, '', () => resetPassword(u)),
+          u.id === meId
+            ? null
+            : u.suspended
+              ? iconButton('play', `Unsuspend ${u.name}`, 'ok', () => toggleSuspend(u))
+              : iconButton('pause', `Suspend ${u.name}`, 'warn', () => toggleSuspend(u)),
+          u.id === meId ? null : iconButton('trash', `Delete ${u.name}`, 'danger', () => openDelete(u))
         )
       )
     )
@@ -176,7 +184,7 @@ async function adminRequest(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401) {
-    show('login-view');
+    toLogin();
     throw new Error('Signed out');
   }
   const data = await res.json();
@@ -224,6 +232,69 @@ $('delete-dialog').addEventListener('close', async () => {
     toast(err.message);
   }
 });
+
+// ---------- add user / passwords ----------
+
+function showPassword(title, text, password) {
+  $('password-title').textContent = title;
+  $('password-text').textContent = text;
+  $('password-value').textContent = password;
+  $('password-copy').textContent = 'Copy';
+  $('password-dialog').showModal();
+}
+
+$('password-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('password-value').textContent);
+    $('password-copy').textContent = 'Copied';
+  } catch {
+    // Clipboard blocked: select the text so it can be copied by hand.
+    getSelection().selectAllChildren($('password-value'));
+  }
+});
+
+// Never leave a password on the page after the dialog closes.
+$('password-dialog').addEventListener('close', () => ($('password-value').textContent = ''));
+
+$('add-user').addEventListener('click', () => {
+  $('add-form').reset();
+  $('add-error').textContent = '';
+  $('add-dialog').showModal();
+  $('add-name').focus();
+});
+
+$('add-form').addEventListener('submit', async (e) => {
+  if (e.submitter && e.submitter.value === 'cancel') return; // let the dialog close
+  e.preventDefault();
+  $('add-error').textContent = '';
+  $('add-confirm').disabled = true;
+  try {
+    const name = $('add-name').value.trim();
+    const res = await adminRequest('POST', '/api/admin/users', {
+      name,
+      email: $('add-email').value.trim(),
+      isAdmin: $('add-admin').checked,
+    });
+    $('add-dialog').close();
+    showPassword(`${name} can sign in now`, `Send them the address of this site, their email ${res.user.email}, and this password:`, res.password);
+    loadUsers();
+  } catch (err) {
+    $('add-error').textContent = err.message;
+  } finally {
+    $('add-confirm').disabled = false;
+  }
+});
+
+async function resetPassword(u) {
+  if (!confirm(`Give ${u.name} a new password? Their current password stops working and they're signed out everywhere.`)) return;
+  try {
+    const res = await adminRequest('POST', `/api/admin/users/${encodeURIComponent(u.id)}/password`);
+    showPassword(`New password for ${u.name}`, `Send ${u.name} (${u.email}) this password:`, res.password);
+    loadUsers();
+  } catch (err) {
+    toast(err.message);
+  }
+}
 
 $('users-search').addEventListener('input', renderUsers);
 $('refresh').addEventListener('click', loadUsers);

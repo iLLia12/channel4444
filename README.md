@@ -17,18 +17,27 @@ docker compose logs -f         # logs
 docker compose down            # stop (data is kept in the channel4444-data volume)
 ```
 
-Docker Compose reads `ACCESS_PASSWORD` from a `.env` file next to `docker-compose.yml`.
-That file is git-ignored, so passwords are never committed.
-
-Create an admin account (the generated password is printed once):
+The app is **invite-only**: everyone signs in with email + password, and there is no sign-up.
+With the server running, create the first admin. Its generated password is printed once:
 
 ```sh
 node admins.js create you@example.com                           # running with npm start
 docker compose exec app node admins.js create you@example.com   # running in Docker
 ```
 
-Open `http://localhost:4444`. On first visit you are sent to the **Create user** page
-(name, email and avatar; the email is required, must be unique, and only you and the admin see it). Your identity is stored in the browser's localStorage.
+Open `http://localhost:4444`, sign in, and invite people from **Admin → Add user**.
+
+## Accounts
+
+- **Sign in** with email + password at `/login`. Every page and API needs a signed-in account.
+- **Accounts are created by an admin** (Admin → **Add user**). The admin gets a generated
+  password, shown once, to pass on. Only scrypt hashes of passwords are stored.
+- **Profile** (`/profile`, "Edit profile" in the header): change name, email (required, unique,
+  visible only to you and admins) and avatar, and **change your password** (at least 8
+  characters; other devices are signed out).
+- **Sessions** last 30 days. A password change or reset signs that person out everywhere.
+- **Forgot your password?** Ask an admin to reset it. Admins can reset their own with
+  `channel4444-admin reset-password you@example.com` on the server.
 
 ## Main page
 
@@ -50,20 +59,17 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
 
 ## Admin page
 
-Open `/admin` (e.g. `http://localhost:4444/admin`) and sign in with an **admin account**
-(email + password). Admin accounts are separate from chat users and live in `data/admins.json`,
-which stores only scrypt hashes, never the passwords themselves. Each password is generated and
-shown once, when the account is created or its password is reset. Sessions last 12 hours.
-Resetting a password signs out that admin everywhere.
+Open `/admin` (the **Admin** link in the header, visible to admins only). Admins are normal
+users with an admin flag, so they use the chat and video like everyone else.
 
-Manage admins with `node admins.js` (on the server: `channel4444-admin`):
+Manage admins from the command line with `node admins.js` (on the server: `channel4444-admin`).
+It talks to the running server:
 
 | Command | What it does |
 | --- | --- |
-| `create <email>` | Create an admin and print its generated password |
-| `reset-password <email>` | Generate a new password and print it |
-| `delete <email>` | Remove an admin |
-| `list` | List admin emails |
+| `create <email>` | Make that email an admin (creating the account if needed) and print a new password |
+| `reset-password <email>` | Give anyone a new password and print it |
+| `list` | List admins |
 
 The layout copies VS Code: a narrow activity bar on the left, with one button for now:
 
@@ -73,17 +79,17 @@ The layout copies VS Code: a narrow activity bar on the left, with one button fo
   - Users created before emails were required have a temporary `user-<id>@temp.invalid` address,
     marked "temporary". The app asks them for a real one when they open **Edit profile**.
   - **Sort** by any column: click its header, then click again to reverse. Your choice is remembered.
-  - Each row has two icon buttons: **⏸ suspend** (▶ to unsuspend) and **🗑 delete**.
+  - **Add user** (toolbar): name, email, and optionally admin. Shows the generated password once,
+    with a Copy button.
+  - Badges: **Admin**, and **No password** for accounts that can't sign in yet (e.g. created
+    before logins existed). Give them a password with 🔑.
+  - Each row has icon buttons: **🔑 reset password** (shows the new one once and signs them out),
+    **⏸ suspend** (▶ to unsuspend) and **🗑 delete**. Your own row has none, so you can't lock
+    yourself out.
   - **Suspend**: disconnects the user right away. They see an "account suspended" page until you
     click **Unsuspend**. Their messages stay.
   - **Delete**: removes the user and signs them out right away. Tick the box in the dialog to
     also delete all their messages and photos.
-
-  There are no per-user passwords, so a suspended or deleted person can clear their browser data
-  and create a new user. To lock someone out completely, change `ACCESS_PASSWORD`
-  (`channel4444-password NEWPASS` on the server).
-
-Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin session lasts 12 hours.
 
 ## Deployment
 
@@ -95,11 +101,17 @@ Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin 
   - Secrets: `/opt/channel4444/.env.prod`
   - Data: `/opt/channel4444/data`; backups go to `/var/backups/channel4444`
   - Commands: `channel4444-update` (pull and rebuild), `channel4444 logs -f`, `channel4444 ps`,
-    `channel4444-password` (show or change the access password), `channel4444-admin` (manage admins)
+    `channel4444-admin` (manage admins and reset passwords)
 - **Admin account:** `setup.sh` requires `ADMIN_EMAIL` until an admin exists. It creates that
-  admin and prints the generated password **once**, in the final summary:
+  admin, the first account with access to the app, and prints the generated password **once**
+  in the final summary:
   `DOMAIN=<your domain> ADMIN_EMAIL=you@example.com bash /opt/channel4444/setup.sh`.
-  Re-running keeps existing admins. Forgot the password? Run `channel4444-admin reset-password you@example.com`.
+  Re-running keeps all data and admins. Forgot the password? Run `channel4444-admin reset-password you@example.com`.
+- **Start over with an empty database:**
+  `RESET=1 DOMAIN=<your domain> ADMIN_EMAIL=you@example.com bash /opt/channel4444/setup.sh`.
+  You're asked to type the domain to confirm (or set `RESET_CONFIRM=<your domain>`). It backs up
+  `data/` to `/var/backups/channel4444/before-reset-<date>.tgz`, deletes all users, messages,
+  photos and admins, then creates the new admin.
 - **Changes to `setup.sh`** (new env variables, proxy or TURN config) only take effect when you
   run it again: `DOMAIN=<your domain> bash /opt/channel4444/setup.sh`. It's safe to re-run, and existing
   secrets are kept. Code-only changes just need `channel4444-update`.
@@ -109,11 +121,10 @@ Signing in as admin also lets you through the `ACCESS_PASSWORD` gate. The admin 
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | HTTP port (default `4444`) |
-| `ACCESS_PASSWORD` | If set, the whole app is locked behind this shared password |
 | `SSL_KEY`, `SSL_CERT` | Paths to a key and certificate to serve over HTTPS |
 | `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` | TURN server for peers behind strict NATs. `TURN_URL` can be comma-separated |
 
-Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
+Example: `PORT=8080 npm start`
 
 ## Notes
 
@@ -122,7 +133,9 @@ Example: `ACCESS_PASSWORD=letmein PORT=8080 npm start`
   with TLS (Caddy, nginx, Cloudflare Tunnel, etc.).
 - Video is peer-to-peer (WebRTC mesh); the server only relays signaling. That works well
   for small groups (about 6 people). Some networks need a TURN server to connect.
-- Data (users, last 500 messages, uploaded images) is stored in `data/`.
+- Data (users, last 500 messages, uploaded images, and the session signing key `session.key`)
+  is stored in `data/`. Pending writes are flushed when the server stops, so deploys don't lose
+  the latest changes.
 - **Caching:** pages are never cached. Scripts and styles are linked as `file.js?v=<hash>`, and the
   hash changes whenever any file in `public/` changes. After a deploy, a normal reload gets the new
   version, even though Cloudflare tells browsers to cache `.js`/`.css` for hours.

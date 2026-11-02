@@ -8,15 +8,21 @@
 # Usage (as root, on the server):
 #   DOMAIN=chat.example.com ADMIN_EMAIL=you@example.com REPO=https://github.com/you/channel4444.git bash setup.sh
 #
-# ADMIN_EMAIL is required until an admin account exists. The admin's password is generated
-# and printed once at the end; only a hash is stored. Re-running keeps existing admins.
+# The app is invite-only: people sign in with email + password, and the admin creates their
+# accounts. ADMIN_EMAIL is required until an admin exists; that admin's password is generated
+# and printed once at the end (only a hash is stored). Re-running keeps all data and admins.
+#
+# Start over with an empty database (all users, messages, photos and admins are deleted;
+# a backup is taken first, and you're asked to type the domain to confirm):
+#   RESET=1 DOMAIN=chat.example.com ADMIN_EMAIL=you@example.com bash setup.sh
 #
 # Optional variables:
 #   APP_DIR        where the app lives          (default /opt/channel4444)
 #   BRANCH         git branch to deploy          (default: repo default)
 #   DATA_DIR       data path INSIDE container    (default /app/data)  <- check your app
-#   ACCESS_PASSWORD shared app password          (default: generated)
-#   ADMIN_EMAIL    email of the admin account to create (required on first run)
+#   ADMIN_EMAIL    email of the admin account to create (required on first run and with RESET=1)
+#   RESET          1 = wipe all app data and start fresh (asks for confirmation)
+#   RESET_CONFIRM  set to the DOMAIN to confirm RESET=1 without the prompt (for automation)
 #   SSH_PORT       your SSH port                 (default 22)
 #   REDIRECT_DOMAINS extra names that redirect to DOMAIN, space-separated
 #                  e.g. "channel4444.party www.channel4444.party"
@@ -33,6 +39,7 @@ DATA_DIR="${DATA_DIR:-/app/data}"
 SSH_PORT="${SSH_PORT:-22}"
 REDIRECT_DOMAINS="${REDIRECT_DOMAINS:-}"
 ADMIN_EMAIL="$(echo "${ADMIN_EMAIL:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+RESET="${RESET:-0}"
 APP_PORT=4444
 
 log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
@@ -45,6 +52,17 @@ die()  { printf '\033[1;31mxx %s\033[0m\n' "$*" >&2; exit 1; }
 command -v apt-get >/dev/null || die "This script supports Ubuntu/Debian only."
 if [[ -n "$ADMIN_EMAIL" && ! "$ADMIN_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
   die "ADMIN_EMAIL '$ADMIN_EMAIL' doesn't look like an email address."
+fi
+if [[ "$RESET" == "1" ]]; then
+  [[ -n "$ADMIN_EMAIL" ]] || die "RESET=1 deletes every account, so ADMIN_EMAIL is required to create the new admin."
+  warn "RESET=1 deletes ALL users, messages, photos and admin accounts in ${APP_DIR}/data."
+  warn "A backup is saved to /var/backups/channel4444 first."
+  if [[ "${RESET_CONFIRM:-}" != "$DOMAIN" ]]; then
+    # /dev/tty can exist but not open (no terminal, e.g. automation); test it in a subshell.
+    ( exec </dev/tty ) 2>/dev/null || die "No terminal to confirm on. Set RESET_CONFIRM=$DOMAIN to confirm."
+    read -r -p "Type the domain ($DOMAIN) to confirm: " RESET_ANSWER </dev/tty
+    [[ "$RESET_ANSWER" == "$DOMAIN" ]] || die "Not confirmed. Nothing was deleted."
+  fi
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -111,11 +129,28 @@ fi
 [[ -f "$APP_DIR/Dockerfile" ]] || die "No Dockerfile in $APP_DIR. Set REPO or copy the app there."
 cd "$APP_DIR"
 mkdir -p data deploy
+
+RESET_BACKUP=""
+if [[ "$RESET" == "1" ]]; then
+  log "Resetting all app data"
+  # Stop the app first so it can't write its in-memory data back after the wipe.
+  if [[ -f compose.prod.yml ]]; then
+    docker compose -f compose.prod.yml --env-file .env.prod stop app 2>/dev/null || true
+  fi
+  if [[ -n "$(ls -A data)" ]]; then
+    mkdir -p /var/backups/channel4444
+    RESET_BACKUP="/var/backups/channel4444/before-reset-$(date +%F-%H%M%S).tgz"
+    tar -czf "$RESET_BACKUP" -C "$APP_DIR" data
+    log "Old data backed up to $RESET_BACKUP"
+    find data -mindepth 1 -delete
+  fi
+fi
+
 # The app runs as the "node" user (uid 1000) inside the container.
 chown -R 1000:1000 data
 
 # The first run must create an admin; later runs may skip ADMIN_EMAIL.
-if [[ -z "$ADMIN_EMAIL" ]] && ! grep -q '"email"' data/admins.json 2>/dev/null; then
+if [[ -z "$ADMIN_EMAIL" ]] && ! grep -q '"isAdmin": true' data/users.json 2>/dev/null; then
   die "No admin account yet. Run again with ADMIN_EMAIL=you@example.com"
 fi
 
@@ -124,7 +159,6 @@ if [[ ! -f .env.prod ]]; then
   log "Generating secrets (.env.prod)"
   gen() { openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24; }
   cat > .env.prod <<EOF
-ACCESS_PASSWORD=${ACCESS_PASSWORD:-$(gen)}
 TURN_USERNAME=channel4444
 TURN_PASSWORD=$(gen)
 EOF
@@ -132,11 +166,13 @@ EOF
 else
   log "Keeping existing .env.prod"
 fi
-# Older installs had a shared ADMIN_PASSWORD; admins are accounts now (data/admins.json).
-if grep -q '^ADMIN_PASSWORD=' .env.prod; then
-  log "Removing the old shared ADMIN_PASSWORD from .env.prod (replaced by admin accounts)"
-  sed -i '/^ADMIN_PASSWORD=/d' .env.prod
-fi
+# Older installs had shared passwords; everyone signs in with their own account now.
+for OLD in ADMIN_PASSWORD ACCESS_PASSWORD; do
+  if grep -q "^${OLD}=" .env.prod; then
+    log "Removing the old shared ${OLD} from .env.prod (replaced by personal accounts)"
+    sed -i "/^${OLD}=/d" .env.prod
+  fi
+done
 # shellcheck disable=SC1091
 set -a; source .env.prod; set +a
 
@@ -191,7 +227,6 @@ services:
     restart: unless-stopped
     environment:
       PORT: "${APP_PORT}"
-      ACCESS_PASSWORD: \${ACCESS_PASSWORD}
       # The IP, not the domain: a Cloudflare-proxied domain doesn't forward TURN traffic.
       TURN_URL: "turn:${PUBLIC_IP}:3478?transport=udp,turn:${PUBLIC_IP}:3478?transport=tcp"
       TURN_USERNAME: \${TURN_USERNAME}
@@ -257,26 +292,15 @@ docker compose -f compose.prod.yml --env-file .env.prod up -d --build
 docker image prune -f
 EOF
 
-# channel4444-password [new]  — show the access password, or change it
-cat > /usr/local/bin/channel4444-password <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-cd ${APP_DIR}
-if [[ -z "\${1:-}" ]]; then
-  grep '^ACCESS_PASSWORD=' .env.prod | cut -d= -f2-
-else
-  [[ "\$1" =~ ^[A-Za-z0-9._-]+\$ ]] || { echo "Use letters, numbers, . _ - only"; exit 1; }
-  sed -i "s/^ACCESS_PASSWORD=.*/ACCESS_PASSWORD=\$1/" .env.prod
-  docker compose -f compose.prod.yml --env-file .env.prod up -d
-  echo "Access password changed. Everyone has to enter the new one."
-fi
-EOF
-# channel4444-admin create|reset-password|delete <email>, channel4444-admin list
+# The shared access password is gone (personal accounts now).
+rm -f /usr/local/bin/channel4444-password
+
+# channel4444-admin create|reset-password <email>, channel4444-admin list
 cat > /usr/local/bin/channel4444-admin <<EOF
 #!/usr/bin/env bash
 cd ${APP_DIR} && exec docker compose -f compose.prod.yml --env-file .env.prod exec -T app node admins.js "\$@"
 EOF
-chmod +x /usr/local/bin/channel4444 /usr/local/bin/channel4444-update /usr/local/bin/channel4444-password /usr/local/bin/channel4444-admin
+chmod +x /usr/local/bin/channel4444 /usr/local/bin/channel4444-update /usr/local/bin/channel4444-admin
 
 # ---------------------------------------------------------------- health check
 log "Waiting for the app to start"
@@ -305,7 +329,7 @@ if [[ -n "$ADMIN_EMAIL" ]]; then
     0) ADMIN_LINES=" Admin email:      ${ADMIN_EMAIL}
  Admin password:   ${ADMIN_NEW_PASSWORD}
                    ^ shown only this once. Save it in a password manager now." ;;
-    3) ADMIN_LINES=" Admin email:      ${ADMIN_EMAIL} (already existed, password unchanged)
+    3) ADMIN_LINES=" Admin email:      ${ADMIN_EMAIL} (already an admin, password unchanged)
                    Forgot it? channel4444-admin reset-password ${ADMIN_EMAIL}" ;;
     *) die "Could not create the admin account: $(cat /tmp/channel4444-admin.err)" ;;
   esac
@@ -319,17 +343,17 @@ cat <<EOF
  channel4444 is deploying at:  https://${DOMAIN}
  (first HTTPS request may take ~30s while the certificate is issued)
 
- Access password:  ${ACCESS_PASSWORD}
- Admin page:       https://${DOMAIN}/admin
+ Sign in at:       https://${DOMAIN}   (invite-only: email + password)
+ Admin page:       https://${DOMAIN}/admin   (Add user → gives you a password to pass on)
 ${ADMIN_LINES}
+${RESET_BACKUP:+ Old data backup:  ${RESET_BACKUP}
+}
  Secrets file:     ${APP_DIR}/.env.prod
  Data:             ${APP_DIR}/data   (backups in /var/backups/channel4444)
 
  Commands:
    channel4444-update            pull latest code and rebuild
-   channel4444-password          show the access password
-   channel4444-password NEWPASS  change it
-   channel4444-admin reset-password EMAIL   new admin password (printed once)
+   channel4444-admin reset-password EMAIL   new password for anyone (printed once)
    channel4444-admin create EMAIL           add another admin
    channel4444-admin list                   list admins
    channel4444 logs -f           follow logs

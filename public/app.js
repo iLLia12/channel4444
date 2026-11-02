@@ -1,5 +1,5 @@
-const me = Store.user;
-if (!me) location.replace('/create.html');
+// Who we are comes from the server (signed-in session) in the 'init' message.
+let me = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -9,7 +9,7 @@ const state = {
   video: [], // [{ socketId, userId }]
 };
 
-const socket = io({ auth: { userId: me && me.id, token: me && me.token } });
+const socket = io();
 
 // ---------- connection ----------
 
@@ -26,32 +26,25 @@ socket.on('disconnect', () => {
 });
 
 socket.on('connect_error', (err) => {
-  if (err.message === 'unknown_user') {
-    Store.user = null;
-    location.replace('/create.html');
-  } else if (err.message === 'unauthorized') {
+  if (err.message === 'unauthorized') {
     location.replace('/login.html');
   } else if (err.message === 'suspended') {
     location.replace('/suspended.html');
   }
 });
 
-// The admin suspended or deleted us while we were online.
+// The admin suspended or deleted us, or our password was reset, while we were online.
 socket.on('account', ({ status }) => {
   if (video.joined) leaveVideo();
-  if (status === 'suspended') {
-    location.replace('/suspended.html');
-  } else if (status === 'deleted') {
-    Store.user = null;
-    location.replace('/create.html');
-  }
+  location.replace(status === 'suspended' ? '/suspended.html' : '/login.html');
 });
 
 socket.on('init', (data) => {
   state.users = data.users;
   state.online = data.online;
   state.video = data.video;
-  Store.user = { ...data.me, token: me.token };
+  me = data.me;
+  $('admin-link').classList.toggle('hidden', !me.isAdmin);
   renderMe();
   renderLists();
   $('messages').replaceChildren();
@@ -61,9 +54,6 @@ socket.on('init', (data) => {
 
 socket.on('users', (users) => {
   state.users = users;
-  const mine = users[me.id];
-  // The directory is public (no email), so keep our private fields.
-  if (mine) Store.user = { ...Store.user, ...mine, token: me.token };
   renderMe();
   renderLists();
   refreshMessageAuthors();
@@ -413,7 +403,6 @@ $('photo-input').addEventListener('change', async (e) => {
   try {
     const res = await fetch('/api/messages/photo', {
       method: 'POST',
-      headers: { 'X-User-Id': me.id, 'X-User-Token': me.token },
       body: data,
     });
     const body = await res.json();
@@ -797,4 +786,10 @@ $('toggle-cam').addEventListener('click', () => {
 
 window.addEventListener('beforeunload', () => {
   if (video.joined) socket.emit('video:leave');
+});
+
+$('logout').addEventListener('click', async () => {
+  if (video.joined) leaveVideo();
+  await fetch('/api/logout', { method: 'POST' });
+  location.replace('/login.html');
 });

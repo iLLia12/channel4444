@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="centered">
+  <div class="stack">
   <form class="card" id="profile-form">
     <div class="brand">channel<span>4444</span></div>
-    <h1 id="form-title">Create user</h1>
+    <h1>Edit profile</h1>
 
     <div class="avatar-picker">
       <div id="avatar-preview"></div>
@@ -35,11 +36,27 @@
 
     <p class="error" id="form-error"></p>
     <div class="actions">
-      <a href="/" class="btn ghost hidden" id="cancel">Cancel</a>
-      <button class="btn primary" type="submit" id="submit">Create</button>
+      <a href="/" class="btn ghost">Back to chat</a>
+      <button class="btn primary" type="submit" id="submit">Save</button>
     </div>
   </form>
+
+  <form class="card" id="password-form">
+    <h2>Change password</h2>
+    <label class="field">Current password
+      <input type="password" id="current-password" required autocomplete="current-password">
+    </label>
+    <label class="field">New password
+      <input type="password" id="new-password" required minlength="8" autocomplete="new-password">
+    </label>
+    <p class="hint">At least 8 characters. Other devices you're signed in on will be signed out.</p>
+    <p class="error" id="password-error"></p>
+    <div class="actions">
+      <button class="btn primary" type="submit" id="password-submit">Change password</button>
+    </div>
+  </form>
+  </div>
   <script src="/common.js"></script>
-  <script src="/create.js"></script>
+  <script src="/profile.js"></script>
 </body>
 </html>

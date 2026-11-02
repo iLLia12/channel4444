@@ -130,3 +130,17 @@
 .email-wrap .badge { flex-shrink: 0; }
 
 .admin-who { color: var(--muted); font-size: 12px; }
+
+.badge.admin { background: rgba(91, 140, 255, .15); color: var(--accent); }
+.user-cell .badge, .user-cell .tag { margin-left: -2px; }
+.modal .field { margin-bottom: 12px; }
+.password-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.password-box code { flex: 1; font-size: 16px; letter-spacing: .02em; user-select: all; overflow-wrap: anywhere; }

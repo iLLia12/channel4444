@@ -9,30 +9,13 @@
   <link rel="stylesheet" href="/admin.css">
 </head>
 <body>
-  <!-- Login -->
-  <div class="admin-login hidden" id="login-view">
-    <form class="card" id="login-form">
-      <div class="brand">channel<span>4444</span> admin</div>
-      <h1>Admin sign in</h1>
-      <label class="field">Email
-        <input type="email" id="admin-email" required autofocus autocomplete="username">
-      </label>
-      <label class="field">Password
-        <input type="password" id="admin-password" required autocomplete="current-password">
-      </label>
-      <p class="error" id="login-error"></p>
-      <div class="actions"><button class="btn primary" type="submit">Sign in</button></div>
-    </form>
-  </div>
-
-  <!-- Disabled -->
-  <div class="admin-login hidden" id="disabled-view">
+  <!-- Signed in, but not an admin -->
+  <div class="admin-login hidden" id="not-admin-view">
     <div class="card">
       <div class="brand">channel<span>4444</span> admin</div>
-      <h1>No admin account yet</h1>
-      <p class="hint">On the server, run <code>setup.sh</code> with <code>ADMIN_EMAIL</code> set, or
-        <code>channel4444-admin create you@example.com</code>. Locally: <code>node admins.js create you@example.com</code>.
-        The generated password is printed once.</p>
+      <h1>Admins only</h1>
+      <p class="hint">Your account doesn't have admin access.</p>
+      <div class="actions"><a class="btn primary" href="/">Back to chat</a></div>
     </div>
   </div>
 
@@ -54,8 +37,10 @@
         <div class="tab">Users <span class="count" id="users-count">0</span></div>
         <div class="editor-actions">
           <input type="text" id="users-search" placeholder="Search by name, email or ID" autocomplete="off">
+          <button class="btn small primary" id="add-user">Add user</button>
           <button class="btn small" id="refresh">Refresh</button>
           <span class="admin-who" id="admin-who"></span>
+          <a class="btn ghost small" href="/">Chat</a>
           <button class="btn ghost small" id="logout">Sign out</button>
         </div>
       </header>
@@ -92,6 +77,38 @@
         <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
         <button class="btn danger" value="confirm" id="delete-confirm">Delete user</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="card modal" id="add-dialog">
+    <form method="dialog" id="add-form">
+      <h1>Add user</h1>
+      <p>They'll sign in with this email and a generated password that you pass on to them.</p>
+      <label class="field">Name
+        <input type="text" id="add-name" maxlength="32" required autocomplete="off">
+      </label>
+      <label class="field">Email
+        <input type="email" id="add-email" maxlength="254" required autocomplete="off">
+      </label>
+      <label class="checkbox"><input type="checkbox" id="add-admin"> Admin (can open this panel)</label>
+      <p class="error" id="add-error"></p>
+      <div class="actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="confirm" id="add-confirm">Create user</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="card modal" id="password-dialog">
+    <form method="dialog">
+      <h1 id="password-title">Password</h1>
+      <p id="password-text"></p>
+      <div class="password-box">
+        <code id="password-value"></code>
+        <button type="button" class="btn small" id="password-copy">Copy</button>
+      </div>
+      <p class="hint">Shown only this once. Only a hash is stored, so it can't be looked up later.</p>
+      <div class="actions"><button class="btn primary" value="ok">Done</button></div>
     </form>
   </dialog>
 

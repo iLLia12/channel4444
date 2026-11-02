@@ -6,11 +6,8 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const { Server } = require('socket.io');
-const admins = require('./admins');
 
 const PORT = Number(process.env.PORT) || 4444;
-// Optional shared password that gates the whole app.
-const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || '';
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -31,17 +28,38 @@ function loadJson(file, fallback) {
   }
 }
 
-const users = loadJson(USERS_FILE, {}); // id -> { id, name, email, emailTemporary, avatar, token, createdAt }
+// id -> { id, name, email, emailTemporary, avatar, salt, hash, isAdmin, suspended, createdAt }
+const users = loadJson(USERS_FILE, {});
 let messages = loadJson(MESSAGES_FILE, []);
 
-const saveTimers = {};
+// Writes are batched (200ms). Pending ones are flushed on shutdown, so a deploy or restart
+// (docker stop sends SIGTERM) doesn't lose the last changes.
+const pendingSaves = new Map(); // file -> { timer, getData }
 function scheduleSave(file, getData) {
-  clearTimeout(saveTimers[file]);
-  saveTimers[file] = setTimeout(() => {
+  const pending = pendingSaves.get(file);
+  if (pending) clearTimeout(pending.timer);
+  const timer = setTimeout(() => {
+    pendingSaves.delete(file);
     fs.writeFile(file, JSON.stringify(getData(), null, 2), (err) => {
       if (err) console.error('Failed to save', file, err);
     });
   }, 200);
+  pendingSaves.set(file, { timer, getData });
+}
+
+function flushSaves() {
+  for (const [file, { timer, getData }] of pendingSaves) {
+    clearTimeout(timer);
+    fs.writeFileSync(file, JSON.stringify(getData(), null, 2));
+  }
+  pendingSaves.clear();
+}
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    flushSaves();
+    process.exit(0);
+  });
 }
 const saveUsers = () => scheduleSave(USERS_FILE, () => users);
 const saveMessages = () => scheduleSave(MESSAGES_FILE, () => messages);
@@ -55,9 +73,26 @@ for (const u of Object.values(users)) {
     u.emailTemporary = true;
     migrated++;
   }
+  // Browser tokens were replaced by password logins.
+  if (u.token) {
+    delete u.token;
+    migrated++;
+  }
 }
+
+// Admins used to be separate accounts in data/admins.json; now they are users with isAdmin.
+const OLD_ADMINS_FILE = path.join(DATA_DIR, 'admins.json');
+if (fs.existsSync(OLD_ADMINS_FILE)) {
+  for (const a of Object.values(loadJson(OLD_ADMINS_FILE, {}))) {
+    const user = findUserByEmail(a.email) || addUser({ name: nameFromEmail(a.email), email: a.email });
+    Object.assign(user, { salt: a.salt, hash: a.hash, isAdmin: true });
+    migrated++;
+  }
+  fs.renameSync(OLD_ADMINS_FILE, OLD_ADMINS_FILE + '.migrated');
+}
+
 if (migrated) {
-  console.log(`Gave ${migrated} existing user(s) a temporary email.`);
+  console.log(`Updated ${migrated} user record(s) to the current format.`);
   saveUsers();
 }
 
@@ -68,7 +103,30 @@ function publicUser(u) {
 
 // Only for the user themselves and the admin.
 function privateUser(u) {
-  return { ...publicUser(u), email: u.email, emailTemporary: !!u.emailTemporary };
+  return { ...publicUser(u), email: u.email, emailTemporary: !!u.emailTemporary, isAdmin: !!u.isAdmin };
+}
+
+function findUserByEmail(email) {
+  const lower = String(email || '').trim().toLowerCase();
+  return Object.values(users).find((u) => u.email && u.email.toLowerCase() === lower) || null;
+}
+
+function nameFromEmail(email) {
+  const local = String(email).split('@')[0].replace(/[._-]+/g, ' ');
+  return cleanName(local.charAt(0).toUpperCase() + local.slice(1)) || 'Admin';
+}
+
+function addUser({ name, email, isAdmin = false }) {
+  const user = {
+    id: crypto.randomBytes(8).toString('hex'),
+    name,
+    email,
+    avatar: null,
+    isAdmin,
+    createdAt: Date.now(),
+  };
+  users[user.id] = user;
+  return user;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -107,38 +165,35 @@ function safeEqual(a, b) {
   return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
 }
 
-function authUser(userId, token) {
-  const u = users[userId];
-  if (!u || !token || !safeEqual(u.token, token)) return null;
-  return u;
+// ---------- passwords ----------
+
+const MIN_PASSWORD = 8;
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return { salt, hash: crypto.scryptSync(String(password), salt, 64).toString('hex') };
 }
 
-// ---------- access gate ----------
-
-const ACCESS_COOKIE = 'c4_access';
-const accessToken = ACCESS_PASSWORD
-  ? crypto.createHash('sha256').update('channel4444:' + ACCESS_PASSWORD).digest('hex')
-  : null;
-
-function parseCookies(header) {
-  const out = {};
-  for (const part of String(header || '').split(';')) {
-    const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
-  }
-  return out;
+function setPassword(user, password) {
+  Object.assign(user, hashPassword(password), { passwordChangedAt: Date.now() });
 }
 
-function hasAccess(cookieHeader) {
-  if (!accessToken) return true;
-  const c = parseCookies(cookieHeader)[ACCESS_COOKIE];
-  return !!c && safeEqual(c, accessToken);
+function checkPassword(user, password) {
+  // Hash even when there's nothing to compare, so timing doesn't reveal which emails exist.
+  const { hash } = hashPassword(password, user && user.salt ? user.salt : 'no-such-user');
+  return !!(user && user.hash) && safeEqual(hash, user.hash);
 }
 
-// Admin sessions: a signed cookie "<email>.<expiry>.<signature>". The signature covers the
-// admin's password hash, so resetting the password signs out every existing session.
-const ADMIN_COOKIE = 'c4_admin';
-const ADMIN_SESSION_SECONDS = 60 * 60 * 12;
+// Shown once to whoever creates or resets it; only the hash is stored.
+function generatePassword() {
+  return crypto.randomBytes(15).toString('base64url'); // 20 characters
+}
+
+// ---------- sessions ----------
+
+// Signed cookie "<userId>.<expiry>.<signature>". The signature covers the password hash, so a
+// password change or reset signs that user out everywhere.
+const SESSION_COOKIE = 'c4_session';
+const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const SESSION_KEY_FILE = path.join(DATA_DIR, 'session.key');
 const sessionKey = (() => {
   try {
@@ -150,33 +205,38 @@ const sessionKey = (() => {
   }
 })();
 
-function signAdminSession(admin, expires) {
-  return crypto.createHmac('sha256', sessionKey).update(`${admin.email}.${expires}.${admin.hash}`).digest('base64url');
+function parseCookies(header) {
+  const out = {};
+  for (const part of String(header || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
 }
 
-function adminSessionCookie(admin) {
-  const expires = Date.now() + ADMIN_SESSION_SECONDS * 1000;
-  return `${Buffer.from(admin.email).toString('base64url')}.${expires}.${signAdminSession(admin, expires)}`;
+function signSession(user, expires) {
+  return crypto.createHmac('sha256', sessionKey).update(`${user.id}.${expires}.${user.hash}`).digest('base64url');
 }
 
-// The signed-in admin for this request, or null.
-function currentAdmin(cookieHeader) {
-  const [emailPart, expires, sig] = String(parseCookies(cookieHeader)[ADMIN_COOKIE] || '').split('.');
-  if (!emailPart || !sig || !(Number(expires) > Date.now())) return null;
-  const admin = admins.find(Buffer.from(emailPart, 'base64url').toString());
-  return admin && safeEqual(sig, signAdminSession(admin, expires)) ? admin : null;
-}
-
-function isAdmin(cookieHeader) {
-  return !!currentAdmin(cookieHeader);
+// The signed-in user for a request or socket (suspended users included; callers check), or null.
+function sessionUser(cookieHeader) {
+  const [id, expires, sig] = String(parseCookies(cookieHeader)[SESSION_COOKIE] || '').split('.');
+  const user = id && users[id];
+  if (!user || !user.hash || !sig || !(Number(expires) > Date.now())) return null;
+  return safeEqual(sig, signSession(user, expires)) ? user : null;
 }
 
 function setCookie(req, res, name, value, maxAge) {
-  const secure = req.secure ? '; Secure' : '';
+  const secure = req.secure || req.get('x-forwarded-proto') === 'https' ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
-    `${name}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`
+    `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`
   );
+}
+
+function startSession(req, res, user) {
+  const expires = Date.now() + SESSION_SECONDS * 1000;
+  setCookie(req, res, SESSION_COOKIE, `${user.id}.${expires}.${signSession(user, expires)}`, SESSION_SECONDS);
 }
 
 // ---------- uploads ----------
@@ -235,41 +295,83 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '16kb' }));
 
+// ---------- sign in ----------
+
 app.post('/api/login', (req, res) => {
-  if (!accessToken) return res.json({ ok: true });
-  if (!safeEqual(req.body && req.body.password, ACCESS_PASSWORD)) {
-    return res.status(401).json({ error: 'Wrong password' });
+  const user = findUserByEmail(req.body && req.body.email);
+  if (!checkPassword(user, req.body && req.body.password)) {
+    // Slow down password guessing.
+    return setTimeout(() => res.status(401).json({ error: 'Wrong email or password' }), 1000);
   }
-  setCookie(req, res, ACCESS_COOKIE, accessToken, 60 * 60 * 24 * 365);
+  if (user.suspended) return res.status(403).json({ error: 'Your account is suspended', suspended: true });
+  startSession(req, res, user);
+  res.json({ ok: true, user: privateUser(user) });
+});
+
+app.post('/api/logout', (req, res) => {
+  setCookie(req, res, SESSION_COOKIE, '', 0);
   res.json({ ok: true });
+});
+
+app.get('/api/session', (req, res) => {
+  const user = sessionUser(req.headers.cookie);
+  res.json({ user: user && !user.suspended ? privateUser(user) : null });
+});
+
+// Local-only door for `node admins.js` (used by setup.sh) to create admins and reset their
+// passwords while the server runs. Requires a loopback connection and the session key file.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+app.post('/internal/admins', (req, res) => {
+  if (!LOOPBACK.has(req.socket.remoteAddress) || !safeEqual(req.get('x-internal-key') || '', sessionKey)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const { action, email } = req.body || {};
+  if (action === 'list') {
+    const list = Object.values(users).filter((u) => u.isAdmin);
+    return res.json({ admins: list.map((u) => ({ email: u.email, name: u.name, createdAt: u.createdAt })) });
+  }
+  const address = cleanEmail(email);
+  if (!EMAIL_RE.test(address)) return res.status(400).json({ error: `Not a valid email: ${email}` });
+  let user = findUserByEmail(address);
+  if (action === 'create') {
+    if (user && user.isAdmin && user.hash) return res.status(409).json({ error: `Admin ${user.email} already exists` });
+    // An existing user with this email is promoted and gets a new password.
+    if (!user) user = addUser({ name: nameFromEmail(address), email: address.toLowerCase() });
+    user.isAdmin = true;
+  } else if (action === 'reset-password') {
+    if (!user) return res.status(404).json({ error: `No user ${address}` });
+  } else {
+    return res.status(400).json({ error: 'Unknown action' });
+  }
+  const password = generatePassword();
+  setPassword(user, password);
+  saveUsers();
+  kickUser(user.id, 'signed-out');
+  broadcastDirectory();
+  res.json({ email: user.email, password });
 });
 
 // ---------- admin ----------
 
-app.get('/api/admin/session', (req, res) => {
-  const admin = currentAdmin(req.headers.cookie);
-  res.json({ enabled: admins.count() > 0, loggedIn: !!admin, email: admin ? admin.email : null });
-});
-
-app.post('/api/admin/login', (req, res) => {
-  if (!admins.count()) return res.status(403).json({ error: 'No admin account exists yet.' });
-  const admin = admins.verify(req.body && req.body.email, req.body && req.body.password);
-  if (!admin) {
-    // Slow down password guessing.
-    return setTimeout(() => res.status(401).json({ error: 'Wrong email or password' }), 1000);
-  }
-  setCookie(req, res, ADMIN_COOKIE, adminSessionCookie(admin), ADMIN_SESSION_SECONDS);
-  res.json({ ok: true, email: admin.email });
-});
-
-app.post('/api/admin/logout', (req, res) => {
-  setCookie(req, res, ADMIN_COOKIE, '', 0);
-  res.json({ ok: true });
-});
-
 function requireAdmin(req, res, next) {
-  if (!isAdmin(req.headers.cookie)) return res.status(401).json({ error: 'unauthorized' });
+  const user = sessionUser(req.headers.cookie);
+  if (!user || user.suspended) return res.status(401).json({ error: 'unauthorized' });
+  if (!user.isAdmin) return res.status(403).json({ error: 'Admins only' });
+  req.user = user;
   next();
+}
+
+function adminView(u, messageCounts = {}, inVideo = new Set()) {
+  return {
+    ...privateUser(u),
+    createdAt: u.createdAt,
+    online: userSockets.has(u.id),
+    inVideo: inVideo.has(u.id),
+    messages: messageCounts[u.id] || 0,
+    suspended: !!u.suspended,
+    suspendedAt: u.suspendedAt || null,
+    hasPassword: !!u.hash,
+  };
 }
 
 app.get('/api/admin/users', requireAdmin, (req, res) => {
@@ -277,22 +379,41 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   for (const m of messages) messageCounts[m.userId] = (messageCounts[m.userId] || 0) + 1;
   const inVideo = new Set(videoParticipants.values());
   const list = Object.values(users)
-    .map((u) => ({
-      ...privateUser(u),
-      createdAt: u.createdAt,
-      online: userSockets.has(u.id),
-      inVideo: inVideo.has(u.id),
-      messages: messageCounts[u.id] || 0,
-      suspended: !!u.suspended,
-      suspendedAt: u.suspendedAt || null,
-    }))
+    .map((u) => adminView(u, messageCounts, inVideo))
     .sort((a, b) => b.createdAt - a.createdAt);
   res.json(list);
+});
+
+// Invite someone: the admin gets a generated password to hand over (shown once).
+app.post('/api/admin/users', requireAdmin, (req, res) => {
+  const name = cleanName(req.body && req.body.name);
+  if (!name) return res.status(400).json({ error: 'Name is required', field: 'name' });
+  const email = cleanEmail(req.body && req.body.email);
+  const problem = emailProblem(email);
+  if (problem) return res.status(problem.includes('already') ? 409 : 400).json({ error: problem, field: 'email' });
+  const user = addUser({ name, email, isAdmin: !!(req.body && req.body.isAdmin) });
+  const password = generatePassword();
+  setPassword(user, password);
+  saveUsers();
+  broadcastDirectory();
+  res.json({ user: adminView(user), password });
+});
+
+app.post('/api/admin/users/:id/password', requireAdmin, (req, res) => {
+  const user = users[req.params.id];
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'Change your own password on your profile page' });
+  const password = generatePassword();
+  setPassword(user, password);
+  saveUsers();
+  kickUser(user.id, 'signed-out'); // their old sessions stopped working
+  res.json({ password });
 });
 
 app.post('/api/admin/users/:id/suspend', requireAdmin, (req, res) => {
   const user = users[req.params.id];
   if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.id === req.user.id) return res.status(400).json({ error: "You can't suspend yourself" });
   const suspended = !!(req.body && req.body.suspended);
   user.suspended = suspended;
   user.suspendedAt = suspended ? Date.now() : null;
@@ -304,6 +425,7 @@ app.post('/api/admin/users/:id/suspend', requireAdmin, (req, res) => {
 app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   const user = users[req.params.id];
   if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.id === req.user.id) return res.status(400).json({ error: "You can't delete yourself" });
   kickUser(user.id, 'deleted');
   let deletedMessages = 0;
   if (req.query.messages === '1') {
@@ -323,24 +445,33 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   res.json({ ok: true, deletedMessages });
 });
 
-const PUBLIC_WHEN_LOCKED = new Set([
+// ---------- sign-in gate ----------
+// Everything below needs a signed-in, non-suspended user, except the sign-in page itself.
+
+const PUBLIC_PATHS = new Set([
+  '/login',
   '/login.html',
-  '/style.css',
   '/login.js',
-  '/favicon.ico',
-  '/admin',
-  '/admin.html',
-  '/admin.js',
-  '/admin.css',
+  '/suspended',
+  '/suspended.html',
+  '/style.css',
   '/common.js',
   '/favicon.svg',
 ]);
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.use((req, res, next) => {
-  const allowed = hasAccess(req.headers.cookie) || isAdmin(req.headers.cookie);
-  if (allowed || PUBLIC_WHEN_LOCKED.has(req.path)) return next();
-  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'unauthorized' });
-  res.redirect('/login.html');
+  const user = sessionUser(req.headers.cookie);
+  if (user && !user.suspended) {
+    req.user = user;
+    return next();
+  }
+  if (PUBLIC_PATHS.has(req.path)) return next();
+  if (user && user.suspended) {
+    if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Your account is suspended', suspended: true });
+    return res.redirect('/suspended.html');
+  }
+  if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) return res.status(401).json({ error: 'unauthorized' });
+  res.redirect('/login.html?next=' + encodeURIComponent(req.originalUrl));
 });
 
 app.get('/api/config', (req, res) => {
@@ -356,51 +487,29 @@ app.get('/api/config', (req, res) => {
   res.json({ iceServers });
 });
 
-// Create a user.
-app.post('/api/users', runUpload(avatarUpload), (req, res) => {
-  const name = cleanName(req.body.name);
-  if (!name) {
-    removeUpload(req.file);
-    return res.status(400).json({ error: 'Name is required' });
-  }
-  const email = cleanEmail(req.body.email);
-  const problem = emailProblem(email);
-  if (problem) {
-    removeUpload(req.file);
-    return res.status(problem.includes('already') ? 409 : 400).json({ error: problem, field: 'email' });
-  }
-  const user = {
-    id: crypto.randomBytes(8).toString('hex'),
-    name,
-    email,
-    avatar: req.file ? '/uploads/' + req.file.filename : null,
-    token: crypto.randomBytes(24).toString('hex'),
-    createdAt: Date.now(),
-  };
-  users[user.id] = user;
-  saveUsers();
-  broadcastDirectory();
-  res.json({ ...privateUser(user), token: user.token });
-});
-
 // Own profile, including the private email (for the edit page).
 app.get('/api/users/me', (req, res) => {
-  const user = authUser(req.get('x-user-id'), req.get('x-user-token'));
-  if (!user) return res.status(401).json({ error: 'Unknown user' });
-  res.json(privateUser(user));
+  res.json(privateUser(req.user));
+});
+
+app.post('/api/users/me/password', (req, res) => {
+  const user = req.user;
+  const { current, password } = req.body || {};
+  if (!checkPassword(user, current)) {
+    return setTimeout(() => res.status(400).json({ error: 'Current password is wrong', field: 'current' }), 1000);
+  }
+  if (String(password || '').length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `New password must be at least ${MIN_PASSWORD} characters`, field: 'password' });
+  }
+  setPassword(user, password);
+  saveUsers();
+  startSession(req, res, user); // keep this browser signed in; other sessions end
+  res.json({ ok: true });
 });
 
 // Update own profile.
 app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
-  const user = authUser(req.get('x-user-id'), req.get('x-user-token'));
-  if (!user) {
-    removeUpload(req.file);
-    return res.status(401).json({ error: 'Unknown user' });
-  }
-  if (user.suspended) {
-    removeUpload(req.file);
-    return res.status(403).json({ error: 'Your account is suspended', suspended: true });
-  }
+  const user = req.user;
   const name = cleanName(req.body.name);
   if (!name) {
     removeUpload(req.file);
@@ -426,20 +535,12 @@ app.put('/api/users/me', runUpload(avatarUpload), (req, res) => {
   }
   saveUsers();
   broadcastDirectory();
-  res.json({ ...privateUser(user), token: user.token });
+  res.json(privateUser(user));
 });
 
 // Post a photo to the chat (optionally with a caption).
 app.post('/api/messages/photo', runUpload(photoUpload), (req, res) => {
-  const user = authUser(req.get('x-user-id'), req.get('x-user-token'));
-  if (!user) {
-    removeUpload(req.file);
-    return res.status(401).json({ error: 'Unknown user' });
-  }
-  if (user.suspended) {
-    removeUpload(req.file);
-    return res.status(403).json({ error: 'Your account is suspended', suspended: true });
-  }
+  const user = req.user;
   if (!req.file) return res.status(400).json({ error: 'No photo' });
   const msg = addMessage(user, String(req.body.text || ''), {
     url: '/uploads/' + req.file.filename,
@@ -560,10 +661,8 @@ function addMessage(user, text, image) {
 }
 
 io.use((socket, next) => {
-  if (!hasAccess(socket.request.headers.cookie)) return next(new Error('unauthorized'));
-  const { userId, token } = socket.handshake.auth || {};
-  const user = authUser(userId, token);
-  if (!user) return next(new Error('unknown_user'));
+  const user = sessionUser(socket.request.headers.cookie);
+  if (!user) return next(new Error('unauthorized'));
   if (user.suspended) return next(new Error('suspended'));
   socket.data.userId = user.id;
   next();
@@ -670,7 +769,6 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   const proto = server instanceof https.Server ? 'https' : 'http';
   console.log(`channel4444 running at ${proto}://localhost:${PORT}`);
-  if (ACCESS_PASSWORD) console.log('Access password is enabled.');
-  const n = admins.count();
-  console.log(n ? `Admin page at /admin (${n} admin account${n > 1 ? 's' : ''}).` : 'No admin account yet: run `node admins.js create <email>`.');
+  const n = Object.values(users).filter((u) => u.isAdmin && u.hash).length;
+  console.log(n ? `${n} admin account${n > 1 ? 's' : ''}.` : 'No admin account yet: run `node admins.js create <email>`.');
 });

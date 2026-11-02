@@ -46,7 +46,18 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - **List of users currently in the video chat**
 - **Separate list of users currently in the app** (everyone with the main page open)
 
-## 3. Create user page
+## 3. Accounts (invite-only)
+- Everyone signs in with **email + password** (`/login`). There is no self-signup, and every page
+  and API requires a signed-in account. The shared access password was removed.
+- Accounts are created by an admin (Admin → Add user). The admin gets a generated password, shown
+  once, to pass on. Passwords are stored as scrypt hashes only.
+- Sessions: signed cookie, 30 days. A password change or reset signs that person out everywhere
+  (open tabs are sent to the sign-in page).
+- Wrong email/password answers after a 1 s delay, with the same message for both.
+- Header: "Edit profile", "Admin" (admins only), "Sign out".
+- Users who existed before logins keep their messages but have **no password** until an admin resets it.
+
+## 4. Profile page (`/profile`)
 - Input for user name (required, up to 32 characters).
 - Input for email (required, must be a valid address, unique across all users — case-insensitive).
   - Private: only the user (on their profile page) and the admin can see it; it is never sent to
@@ -56,17 +67,17 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
     `user-<id>@temp.invalid` (`.invalid` can never be a real domain). When they open
     "Edit profile", the email field is empty with a notice asking for their real address.
 - Upload avatar (optional, up to 5 MB; initials are shown if there's no avatar).
-- The same page is used to edit your profile later ("Edit profile" on the main page).
-- No accounts or passwords per user: the identity is stored in the browser.
+- Change password: current password + new one (at least 8 characters). Other devices are signed out.
 
-## 4. Admin page (`/admin`)
-- Signed in with an admin account: email + password. Admin accounts are separate from chat users.
-  - `setup.sh` creates the first admin from `ADMIN_EMAIL` (required on the first run) and prints
-    its generated password once. Only a scrypt hash is stored (`data/admins.json`).
-  - More admins, password resets and removal: `channel4444-admin create|reset-password|delete|list`.
-  - Sessions are signed cookies valid for 12 hours. A password reset signs that admin out everywhere.
-  - Without any admin account, `/admin` shows how to create one.
-  - The header shows the signed-in admin's email.
+## 5. Admin page (`/admin`)
+- For admins: users with the admin flag. They also use the chat and video like everyone else.
+  - `setup.sh` creates the first admin from `ADMIN_EMAIL` (required on the first run and with
+    `RESET=1`) and prints its generated password once. This admin is the first account with access.
+  - Command line: `channel4444-admin create|reset-password <email>` and `channel4444-admin list`.
+  - Non-admins who open `/admin` see "Admins only". Signed-out visitors are sent to sign in.
+  - The header shows the signed-in admin's email, a link back to the chat, and Sign out.
+  - **Add user** button: name, email, optional admin flag. Shows the generated password once,
+    with a Copy button.
 - VS Code-style layout: a narrow activity bar on the left with icon buttons, and content on the right.
 - Activity bar buttons (one for now):
   - **Users**: a list of all registered users with avatar, name, email (temporary ones are greyed
@@ -76,22 +87,27 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
   - Click any column header (User, Email, ID, Registered, Status, Messages) to sort; click again to reverse.
     An arrow shows the current sort, and it is remembered in the browser. Status sorts by activity:
     in video chat → online → offline → suspended.
-  - Row actions are icon buttons (with tooltips): pause = suspend, play = unsuspend, trash = delete.
+  - Badges next to the name: "you", "Admin", "No password" (can't sign in until reset).
+  - Row actions are icon buttons (with tooltips): key = reset password (new one shown once, signs
+    them out), pause = suspend, play = unsuspend, trash = delete. None on your own row.
   - **Suspend / Unsuspend** a user (asks to confirm). A suspended user is disconnected immediately
     (also from the video call) and sees an "account suspended" page. They can't chat, post photos,
     edit their profile or join the call until unsuspended. Their messages stay.
   - **Delete** a user (confirmation dialog). They are disconnected immediately and sent to the
-    create-user page. Optionally also deletes all their messages and photos (checkbox in the dialog);
+    sign-in page. Optionally also deletes all their messages and photos (checkbox in the dialog);
     otherwise their messages stay.
-  - Limitation: there are no per-user passwords, so a suspended or deleted person can clear their
-    browser data and create a new user. To lock someone out completely, change `ACCESS_PASSWORD`.
-- Sign out button; admin sessions expire after 12 hours.
 
-## 5. Privacy
-- Optional shared access password for the whole app (`ACCESS_PASSWORD`).
+## 6. Server setup (`setup.sh`)
+- `ADMIN_EMAIL` creates the first admin and prints its password once. Re-runs keep all data.
+- `RESET=1` starts over with an empty database: asks you to type the domain (or `RESET_CONFIRM`),
+  backs up `data/` to `/var/backups/channel4444/before-reset-<date>.tgz`, deletes all users,
+  messages, photos and admins, then creates the admin from `ADMIN_EMAIL`.
+
+## 7. Privacy
+- Invite-only: nothing (pages, API, photos, live connection) is reachable without signing in.
 - Video and audio go directly between browsers (WebRTC); the server only relays the connection setup.
 
-## 6. Known limits
+## 8. Known limits
 - Camera/mic need HTTPS unless you're on localhost.
 - Group video works well for about 6 people, because every participant connects to every other one.
 - Some networks need a TURN server (configured with the `TURN_*` variables). In production it is
