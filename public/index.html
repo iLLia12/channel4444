@@ -65,6 +65,17 @@
     </section>
   </main>
 
+  <dialog class="lightbox" id="lightbox" aria-label="Photo">
+    <div class="lightbox-bar">
+      <div class="lightbox-info" id="lightbox-info"></div>
+      <div class="lightbox-actions" id="lightbox-actions"></div>
+    </div>
+    <div class="lightbox-stage" id="lightbox-stage">
+      <img id="lightbox-img" alt="Photo">
+    </div>
+    <p class="lightbox-caption" id="lightbox-caption"></p>
+  </dialog>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/common.js"></script>
   <script src="/app.js"></script>

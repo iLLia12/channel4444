@@ -181,7 +181,17 @@ function renderMessage(m) {
         { class: 'msg-photo' },
         el(
           'a',
-          { href: m.image.url, target: '_blank', rel: 'noopener' },
+          {
+            href: m.image.url,
+            target: '_blank',
+            rel: 'noopener',
+            // Plain click opens the in-app viewer; Cmd/Ctrl/middle-click still opens a new tab.
+            onclick: (e) => {
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              openLightbox(m);
+            },
+          },
           el('img', {
             src: m.image.url,
             alt: 'Photo',
@@ -318,6 +328,38 @@ socket.on('chat:updated', (m) => {
 socket.on('chat:deleted', ({ id }) => {
   const node = $('messages').querySelector(`.msg[data-id="${id}"]`);
   if (node) node.remove();
+  if (lightbox.messageId === id) $('lightbox').close();
+});
+
+// ---------- photo viewer ----------
+
+const lightbox = { messageId: null };
+
+function openLightbox(m) {
+  const u = userById(m.userId);
+  lightbox.messageId = m.id;
+  $('lightbox-img').src = m.image.url;
+  $('lightbox-info').replaceChildren(
+    avatarEl(u, 'sm'),
+    el('span', { class: 'lightbox-name', text: u.name }),
+    el('time', { text: formatTime(m.ts), title: new Date(m.ts).toLocaleString() })
+  );
+  $('lightbox-actions').replaceChildren(
+    downloadLink(m.image),
+    iconButton('close', 'Close (Esc)', '', () => $('lightbox').close())
+  );
+  $('lightbox-caption').replaceChildren(m.text ? linkify(m.text) : '');
+  $('lightbox').showModal();
+}
+
+// Clicking anywhere except the photo or the buttons closes the viewer.
+$('lightbox').addEventListener('click', (e) => {
+  if (!e.target.closest('#lightbox-img, .lightbox-actions, .lightbox-caption a')) $('lightbox').close();
+});
+
+$('lightbox').addEventListener('close', () => {
+  lightbox.messageId = null;
+  $('lightbox-img').removeAttribute('src');
 });
 
 $('composer').addEventListener('submit', (e) => {

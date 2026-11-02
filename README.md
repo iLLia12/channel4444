@@ -37,8 +37,8 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
   Other people's tiles show a blue bar for the audio arriving from them, and "No audio received"
   if none is.
 - **Chat**: shows the last 500 messages. Text messages, plus photos (📷 button). Anything typed in the box is sent
-  as the photo's caption. Click a photo to open it full size, or hover over the message and click
-  the ⬇ download icon (next to edit/delete). File names aren't shown in the chat, but downloads keep the original name.
+  as the photo's caption. Click a photo to view it full screen in a popup (Esc or a click outside
+  closes it), or hover over the message and click the ⬇ download icon (next to edit/delete). File names aren't shown in the chat, but downloads keep the original name.
   Hover over your own message and click the **✏️ pencil** to edit it (Enter saves, Esc cancels)
   or the **🗑 trash** to delete it.
   Changes appear for everyone right away, and edited messages are marked "(edited)".
