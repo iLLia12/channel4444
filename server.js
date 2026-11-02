@@ -57,6 +57,11 @@ function directory() {
   return out;
 }
 
+// One newline style everywhere: form uploads (photo captions) arrive with \r\n.
+function cleanText(text) {
+  return String(text || '').replace(/\r\n?/g, '\n').trim().slice(0, MAX_TEXT);
+}
+
 function cleanName(name) {
   return String(name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
 }
@@ -457,7 +462,7 @@ function addMessage(user, text, image) {
   const msg = {
     id: crypto.randomBytes(8).toString('hex'),
     userId: user.id,
-    text: text.slice(0, MAX_TEXT),
+    text: cleanText(text),
     image: image || null,
     ts: Date.now(),
   };
@@ -494,7 +499,7 @@ io.on('connection', (socket) => {
   broadcastPresence();
 
   socket.on('chat:send', (payload) => {
-    const text = String((payload && payload.text) || '').trim();
+    const text = cleanText(payload && payload.text);
     if (!text || !users[userId] || users[userId].suspended) return;
     addMessage(users[userId], text, null);
   });
@@ -512,7 +517,7 @@ io.on('connection', (socket) => {
   socket.on('chat:edit', (payload, ack) => {
     const msg = ownMessage(payload);
     if (!msg) return reply(ack, { error: 'You can only edit your own messages' });
-    const text = String((payload && payload.text) || '').trim().slice(0, MAX_TEXT);
+    const text = cleanText(payload && payload.text);
     // A photo may lose its caption; a text message can't become empty (delete it instead).
     if (!text && !msg.image) return reply(ack, { error: 'Message is empty' });
     if (text !== msg.text) {

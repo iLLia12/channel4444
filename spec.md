@@ -12,6 +12,11 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 ## 2. Main page
 - **Text chat**
   - Text messages; links are clickable.
+  - Message box is multiline: it grows with the text up to about 7 lines, then scrolls.
+    On computers, Enter sends and Shift+Enter adds a new line. On touch screens, Enter adds a new line
+    and the send button sends.
+  - Icon buttons around the message box: a small image icon (send a photo) on the left, a send
+    arrow on the right (greyed out while the box is empty).
   - Photo upload: JPEG, PNG, GIF or WebP, up to 20 MB. Whatever is typed in the box is sent as the caption.
   - Photo viewer: clicking a photo opens it in a full-screen popup inside the app (not a new tab),
     showing the sender, time and caption, with download and close buttons. Close with Esc, the ✕

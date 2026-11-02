@@ -362,13 +362,37 @@ $('lightbox').addEventListener('close', () => {
   $('lightbox-img').removeAttribute('src');
 });
 
+// Multiline message box: grows with its content up to a limit, then scrolls.
+function resizeComposer() {
+  const input = $('message-input');
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  $('send-btn').disabled = !input.value.trim();
+}
+
+function clearComposer() {
+  $('message-input').value = '';
+  resizeComposer();
+}
+
+$('message-input').addEventListener('input', resizeComposer);
+
+// Desktop: Enter sends, Shift+Enter adds a line. Touch screens: Enter adds a line, the button sends.
+const touchKeyboard = matchMedia('(pointer: coarse)').matches;
+$('message-input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing || touchKeyboard) return;
+  e.preventDefault();
+  $('composer').requestSubmit();
+});
+
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('message-input');
   const text = input.value.trim();
   if (!text) return;
   socket.emit('chat:send', { text });
-  input.value = '';
+  clearComposer();
+  input.focus();
 });
 
 $('photo-input').addEventListener('change', async (e) => {
@@ -394,7 +418,7 @@ $('photo-input').addEventListener('change', async (e) => {
     const body = await res.json();
     if (body.suspended) return location.replace('/suspended.html');
     if (!res.ok) throw new Error(body.error || 'Upload failed');
-    input.value = '';
+    clearComposer();
     $('chat-error').textContent = '';
   } catch (err) {
     $('chat-error').textContent = err.message;
