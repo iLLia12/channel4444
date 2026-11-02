@@ -160,10 +160,10 @@ function linkify(text) {
   return frag;
 }
 
-// Small icon in the photo's corner. The file name isn't shown, but downloads keep it.
+// Download icon, styled like the edit/delete icons. The file name isn't shown, but downloads keep it.
 function downloadLink(image) {
   const label = `Download photo${image.size ? ' (' + formatSize(image.size) + ')' : ''}`;
-  const a = el('a', { class: 'photo-download', href: image.url, download: image.name || 'photo', title: label, 'aria-label': label });
+  const a = el('a', { class: 'icon-btn sm', href: image.url, download: image.name || 'photo', title: label, 'aria-label': label });
   a.innerHTML = ICONS.download;
   return a;
 }
@@ -185,8 +185,7 @@ function renderMessage(m, older) {
             alt: 'Photo',
             onload: older ? () => keepAnchored(node) : () => scrollChat(),
           })
-        ),
-        downloadLink(m.image)
+        )
       )
     );
   }
@@ -207,12 +206,14 @@ function renderMessage(m, older) {
         m.editedAt
           ? el('span', { class: 'msg-edited', text: '(edited)', title: 'Edited ' + new Date(m.editedAt).toLocaleString() })
           : null,
-        mine
+        // Anyone can download a photo; only the author can edit or delete.
+        mine || m.image
           ? el(
               'span',
               { class: 'msg-actions' },
-              iconButton('pencil', 'Edit message', 'sm', () => startEdit(m, node)),
-              iconButton('trash', 'Delete message', 'sm danger', () => deleteMessage(m))
+              m.image ? downloadLink(m.image) : null,
+              mine ? iconButton('pencil', 'Edit message', 'sm', () => startEdit(m, node)) : null,
+              mine ? iconButton('trash', 'Delete message', 'sm danger', () => deleteMessage(m)) : null
             )
           : null
       ),

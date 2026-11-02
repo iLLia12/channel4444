@@ -13,8 +13,8 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
 - **Text chat**
   - Text messages; links are clickable.
   - Photo upload: JPEG, PNG, GIF or WebP, up to 20 MB. Whatever is typed in the box is sent as the caption.
-  - Photo download: click a photo to open it full size, or click the small download icon in its
-    top-right corner (tooltip shows the file size). The file name is not shown in the chat, but
+  - Photo download: click a photo to open it full size, or click the download icon next to the
+    edit/delete icons (shown on hover for everyone's photos; tooltip shows the file size). The file name is not shown in the chat, but
     downloaded files keep their original name.
   - History: the server keeps the last 500 messages.
   - Lazy loading: opening the page loads only the newest 20 messages. Scrolling near the top loads
@@ -22,8 +22,8 @@ The app is mainly for private video meetings, text chat, and photo upload/downlo
     added above, including photos that finish loading later. "Loading earlier messages…" shows
     while loading, and "This is the start of the chat" when there's nothing older. If 20 messages
     don't fill the panel (tall screen), more load automatically.
-  - Edit and delete your own messages with icon buttons (✏️ pencil = edit, 🗑 trash = delete, with
-    tooltips). They appear when you hover over your message, and are always visible on touch screens. Nobody can edit or delete someone else's messages.
+  - Message icons appear on hover (always visible on touch screens), in this order:
+    ⬇ download (photos, anyone), ✏️ edit and 🗑 delete (your own messages only). Nobody can edit or delete someone else's messages.
     - Editing happens in place: Enter saves, Esc cancels. Edited messages show "(edited)".
     - A photo's caption can be removed; emptying a text message deletes it instead.
     - Deleting asks for confirmation, removes the message for everyone, and deletes the photo file.
