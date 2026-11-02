@@ -36,7 +36,8 @@ Open `http://localhost:4444`. On first visit you are sent to the **Create user**
   own tile shows your mic level. A red notice appears if others can't hear or see you.
   Other people's tiles show a blue bar for the audio arriving from them, and "No audio received"
   if none is.
-- **Chat**: text messages, plus photos (📷 button). Anything typed in the box is sent
+- **Chat**: opens with the newest 20 messages; scroll up to load earlier ones, 20 at a time.
+  Text messages, plus photos (📷 button). Anything typed in the box is sent
   as the photo's caption. Click a photo to open it full size, or use the download link.
   Hover over your own message and click the **✏️ pencil** to edit it (Enter saves, Esc cancels)
   or the **🗑 trash** to delete it.

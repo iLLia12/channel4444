@@ -54,9 +54,14 @@ socket.on('init', (data) => {
   Store.user = { ...data.me, token: me.token };
   renderMe();
   renderLists();
-  $('messages').replaceChildren();
+  // (Re)connected: start from the newest page again.
+  chatHistory.hasMore = data.hasMore;
+  chatHistory.loading = false;
+  $('messages').replaceChildren(historyMarker());
   data.messages.forEach((m) => appendMessage(m));
+  updateHistoryMarker();
   scrollChat(true);
+  fillChat();
 });
 
 socket.on('users', (users) => {
@@ -155,7 +160,7 @@ function linkify(text) {
   return frag;
 }
 
-function renderMessage(m) {
+function renderMessage(m, older) {
   const u = userById(m.userId);
   const mine = m.userId === me.id;
   const body = el('div', { class: 'msg-body' });
@@ -167,7 +172,11 @@ function renderMessage(m) {
         el(
           'a',
           { href: m.image.url, target: '_blank', rel: 'noopener' },
-          el('img', { src: m.image.url, alt: m.image.name, loading: 'lazy', onload: () => scrollChat() })
+          el('img', {
+            src: m.image.url,
+            alt: m.image.name,
+            onload: older ? () => keepAnchored(node) : () => scrollChat(),
+          })
         ),
         el(
           'a',
@@ -181,7 +190,7 @@ function renderMessage(m) {
 
   const node = el(
     'div',
-    { class: 'msg' + (mine ? ' mine' : ''), 'data-user': m.userId, 'data-id': m.id },
+    { class: 'msg' + (mine ? ' mine' : ''), 'data-user': m.userId, 'data-id': m.id, 'data-ts': m.ts },
     el('div', { class: 'msg-avatar' }, avatarEl(u, 'sm')),
     el(
       'div',
@@ -276,6 +285,74 @@ function refreshMessageAuthors() {
   }
 }
 
+// ---------- lazy-loaded history ----------
+
+const chatHistory = { hasMore: false, loading: false };
+
+function historyMarker() {
+  return el('div', { class: 'history-marker', id: 'history-marker' });
+}
+
+function updateHistoryMarker() {
+  const marker = $('history-marker');
+  if (!marker) return;
+  const empty = !$('messages').querySelector('.msg');
+  marker.textContent = chatHistory.loading
+    ? 'Loading earlier messages…'
+    : chatHistory.hasMore
+      ? ''
+      : empty
+        ? 'No messages yet. Say hi!'
+        : 'This is the start of the chat';
+}
+
+function oldestMessage() {
+  return $('messages').querySelector('.msg');
+}
+
+function loadOlder() {
+  if (!chatHistory.hasMore || chatHistory.loading) return;
+  const oldest = oldestMessage();
+  if (!oldest) return;
+  chatHistory.loading = true;
+  updateHistoryMarker();
+  socket.emit('chat:history', { before: oldest.dataset.id, beforeTs: Number(oldest.dataset.ts) }, (res) => {
+    chatHistory.loading = false;
+    chatHistory.hasMore = !!res.hasMore;
+    const box = $('messages');
+    // Keep what you're looking at in place while older messages are added above it.
+    const fromBottom = box.scrollHeight - box.scrollTop;
+    const nodes = res.messages
+      .filter((m) => !box.querySelector(`.msg[data-id="${m.id}"]`))
+      .map((m) => renderMessage(m, true));
+    $('history-marker').after(...nodes);
+    updateHistoryMarker();
+    for (const n of nodes) n.knownHeight = n.offsetHeight;
+    box.scrollTop = box.scrollHeight - fromBottom;
+    fillChat();
+  });
+}
+
+// If the loaded messages don't fill the panel there's no scrollbar to pull, so keep loading.
+function fillChat() {
+  const box = $('messages');
+  if (chatHistory.hasMore && box.scrollHeight <= box.clientHeight + 100) loadOlder();
+}
+
+$('messages').addEventListener('scroll', () => {
+  if ($('messages').scrollTop < 150) loadOlder();
+});
+
+// Older photos load after they're inserted above the viewport; grow the scroll by the
+// same amount so the messages you're reading don't jump down. `node.knownHeight` is
+// recorded right after insertion (an image can finish loading before the next frame).
+function keepAnchored(node) {
+  const box = $('messages');
+  const delta = node.offsetHeight - (node.knownHeight || 0);
+  node.knownHeight = node.offsetHeight;
+  if (delta && node.getBoundingClientRect().top < box.getBoundingClientRect().top) box.scrollTop += delta;
+}
+
 function isNearBottom() {
   const box = $('messages');
   return box.scrollHeight - box.scrollTop - box.clientHeight < 120;
@@ -289,6 +366,7 @@ function scrollChat(force) {
 socket.on('chat:message', (m) => {
   const stick = isNearBottom() || m.userId === me.id;
   appendMessage(m);
+  updateHistoryMarker();
   if (stick) scrollChat(true);
 });
 
@@ -300,6 +378,8 @@ socket.on('chat:updated', (m) => {
 socket.on('chat:deleted', ({ id }) => {
   const node = $('messages').querySelector(`.msg[data-id="${id}"]`);
   if (node) node.remove();
+  updateHistoryMarker();
+  fillChat();
 });
 
 $('composer').addEventListener('submit', (e) => {
